@@ -21,6 +21,7 @@ venv/
 .agents/
 .claude/
 .crush/
+.omc/
 .openhands/
 .serena/
 
