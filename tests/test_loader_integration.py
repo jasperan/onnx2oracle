@@ -3,8 +3,11 @@
 Run with:
     pytest tests/test_loader_integration.py --run-integration -v -s
 
-Defaults to the live `pythia-oracle` container at localhost:1523.
-Override with ORACLE_DSN env var if running against a different instance.
+Defaults to the credentials that `docker/docker-compose.yml` provisions
+(system/onnx2oracle@localhost:1521/FREEPDB1). To point at a different container
+set ORACLE_DSN in the environment:
+
+    ORACLE_DSN='user/password@host:port/service' pytest ... --run-integration
 """
 
 import os
@@ -25,12 +28,12 @@ def _get_dsn() -> DSN:
     env = os.environ.get("ORACLE_DSN")
     if env:
         return DSN.parse(env)
-    # Default: the local free container used by pythia project
+    # Default matches docker/docker-compose.yml (local Oracle 26ai Free)
     return DSN(
         user="system",
-        password="Welcome12345*",
+        password="onnx2oracle",
         host="localhost",
-        port=1523,
+        port=1521,
         service="FREEPDB1",
     )
 
