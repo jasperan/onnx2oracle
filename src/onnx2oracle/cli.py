@@ -78,6 +78,11 @@ def load(
         console.print("[red]Provide a preset name or --from-huggingface[/red]")
         raise typer.Exit(2)
 
+    if target is None and dsn is None and "ORACLE_DSN" not in os.environ:
+        if not DEFAULT_CONFIG_PATH.exists():
+            console.print("[dim]No DSN configured — defaulting to --target local (docker-compose).[/dim]")
+            target = "local"
+
     if preset:
         spec = get_preset(preset)
     else:
@@ -130,6 +135,11 @@ def verify(
     dsn: str | None = typer.Option(None, help="Full DSN."),
 ) -> None:
     """Run an end-to-end smoke test against a registered model."""
+    if target is None and dsn is None and "ORACLE_DSN" not in os.environ:
+        if not DEFAULT_CONFIG_PATH.exists():
+            console.print("[dim]No DSN configured — defaulting to --target local (docker-compose).[/dim]")
+            target = "local"
+
     dsn_resolved = resolve_dsn(cli_dsn=dsn, target=target)
     model_name = name or "ALL_MINILM_L6_V2"
     console.print(f"[green]Target:[/green] {dsn_resolved.display()}")
