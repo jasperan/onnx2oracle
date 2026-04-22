@@ -90,7 +90,7 @@ def load(
             console.print("[red]--dims is required with --from-huggingface[/red]")
             raise typer.Exit(2)
         if not name:
-            name = from_huggingface.replace("/", "_").replace("-", "_").upper()
+            name = from_huggingface.replace("/", "_").replace("-", "_").replace(".", "_").upper()
         if pooling not in ("mean", "cls"):
             console.print(f"[red]--pooling must be 'mean' or 'cls', got {pooling!r}[/red]")
             raise typer.Exit(2)
