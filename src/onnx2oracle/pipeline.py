@@ -97,7 +97,7 @@ def build_augmented(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
                 f"({type(tokenizer).__name__}) which cannot be represented as a "
                 f"BertTokenizer ONNX graph compatible with Oracle's DBMS_VECTOR. "
                 f"Use a model with a WordPiece vocabulary (BertTokenizer family)."
-            )
+            ) from None
         pre_model, _ = gen_processing_models(
             tokenizer, pre_kwargs={}, post_kwargs=None, opset=14
         )
