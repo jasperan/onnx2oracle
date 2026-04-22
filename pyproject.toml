@@ -54,11 +54,13 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+# B008: Typer/FastAPI use function calls in argument defaults by design
+ignore = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

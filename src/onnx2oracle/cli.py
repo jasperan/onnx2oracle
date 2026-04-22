@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -58,19 +57,19 @@ def presets() -> None:
 
 @app.command()
 def load(
-    preset: Optional[str] = typer.Argument(None, help="Preset name (see `presets`)."),
-    from_huggingface: Optional[str] = typer.Option(
+    preset: str | None = typer.Argument(None, help="Preset name (see `presets`)."),
+    from_huggingface: str | None = typer.Option(
         None, "--from-huggingface", help="Raw HF repo, e.g. BAAI/bge-base-en-v1.5."
     ),
     pooling: str = typer.Option("mean", help="Pooling for --from-huggingface: mean or cls."),
     normalize: bool = typer.Option(True, "--normalize/--no-normalize"),
     max_length: int = typer.Option(512, help="Max tokenizer sequence length."),
-    dims: Optional[int] = typer.Option(None, help="Expected output dims (required for --from-huggingface)."),
-    name: Optional[str] = typer.Option(None, help="Oracle model name override."),
-    target: Optional[str] = typer.Option(None, help="'local' for Docker shortcut."),
-    dsn: Optional[str] = typer.Option(None, help="Full DSN: user/pw@host:port/service."),
+    dims: int | None = typer.Option(None, help="Expected output dims (required for --from-huggingface)."),
+    name: str | None = typer.Option(None, help="Oracle model name override."),
+    target: str | None = typer.Option(None, help="'local' for Docker shortcut."),
+    dsn: str | None = typer.Option(None, help="Full DSN: user/pw@host:port/service."),
     force: bool = typer.Option(False, help="Replace if already registered."),
-    cache_dir: Optional[Path] = typer.Option(None, help="HuggingFace cache dir."),
+    cache_dir: Path | None = typer.Option(None, help="HuggingFace cache dir."),
 ) -> None:
     """Build the augmented ONNX pipeline and register it in Oracle."""
     if not preset and not from_huggingface:
@@ -124,9 +123,9 @@ def load(
 
 @app.command()
 def verify(
-    name: Optional[str] = typer.Option(None, help="Oracle model name (defaults to ALL_MINILM_L6_V2)."),
-    target: Optional[str] = typer.Option(None, help="'local' for Docker shortcut."),
-    dsn: Optional[str] = typer.Option(None, help="Full DSN."),
+    name: str | None = typer.Option(None, help="Oracle model name (defaults to ALL_MINILM_L6_V2)."),
+    target: str | None = typer.Option(None, help="'local' for Docker shortcut."),
+    dsn: str | None = typer.Option(None, help="Full DSN."),
 ) -> None:
     """Run an end-to-end smoke test against a registered model."""
     dsn_resolved = resolve_dsn(cli_dsn=dsn, target=target)
@@ -169,10 +168,12 @@ def docker_up(wait: bool = typer.Option(True, help="Wait for healthcheck to pass
         raise typer.Exit(rc)
     if wait:
         console.print("[yellow]Waiting for Oracle to be ready (first start is ~3-5 min)...[/yellow]")
-        _compose(
-            "exec", "-T", "oracle", "bash", "-lc",
-            "until echo 'select 1 from dual;' | sqlplus -S system/onnx2oracle@localhost:1521/FREEPDB1 >/dev/null 2>&1; do sleep 5; done; echo ready",
+        probe = (
+            "until echo 'select 1 from dual;' | "
+            "sqlplus -S system/onnx2oracle@localhost:1521/FREEPDB1 >/dev/null 2>&1; "
+            "do sleep 5; done; echo ready"
         )
+        _compose("exec", "-T", "oracle", "bash", "-lc", probe)
     console.print("[bold green]✓ Oracle up.[/bold green]")
 
 

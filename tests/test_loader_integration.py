@@ -20,7 +20,6 @@ from onnx2oracle.pipeline import build_augmented
 from onnx2oracle.presets import get_preset
 from onnx2oracle.verify import smoke_test
 
-
 pytestmark = pytest.mark.integration
 
 
