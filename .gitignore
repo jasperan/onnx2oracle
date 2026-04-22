@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Env
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Agent directories (NEVER commit)
+.agents/
+.claude/
+.crush/
+.openhands/
+.serena/
+
+# Planning/scratch
+docs/plans/
+task_plan.md
+findings.md
+progress.md
+dogfood-output/
+.playwright-mcp/
+
+# Model artifacts (too large)
+*.onnx
+hf_cache/
+
+# OS
+.DS_Store
+Thumbs.db
