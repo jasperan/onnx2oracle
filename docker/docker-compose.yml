@@ -1,0 +1,21 @@
+services:
+  oracle:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: onnx2oracle-oracle
+    ports:
+      - "1521:1521"
+    environment:
+      ORACLE_PWD: onnx2oracle
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "echo 'select 1 from dual;' | sqlplus -S system/onnx2oracle@localhost:1521/FREEPDB1 >/dev/null 2>&1"
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 180s
+
+volumes:
+  oracle_data:
