@@ -52,7 +52,7 @@
   <article class="doc-body">
     <div class="eyebrow">Guide 03</div>
     <h1>Pick a model</h1>
-    <p class="lede">Six presets, five questions. If you don't know which to use, <code>all-MiniLM-L6-v2</code> is the right default for English text below ~5M rows.</p>
+    <p class="lede">Five presets, five questions. If you don't know which to use, <code>all-MiniLM-L6-v2</code> is the right default for English text below ~5M rows.</p>
 
     <h2>The decision tree</h2>
 
@@ -61,7 +61,7 @@
         <div class="step-num">Q1</div>
         <div>
           <h3>Is any of your text non-English?</h3>
-          <p>If yes, skip straight to <code>multilingual-e5-small</code>. The English-only models will happily embed Spanish or Japanese, but the cosine distances will be junk across languages.</p>
+          <p>onnx2oracle's English-only WordPiece presets will happily embed Spanish or Japanese, but the cosine distances will be junk across languages. For truly multilingual retrieval, see the "Not supported" note below and consider a WordPiece-based multilingual model via <a href="05-custom-models.html"><code>--from-huggingface</code></a>.</p>
           <p>If every input is English (or can be translated to English upstream), continue.</p>
         </div>
       </div>
@@ -82,7 +82,7 @@
         <div class="step-num">Q3</div>
         <div>
           <h3>How long are your documents?</h3>
-          <p>Five of the six presets truncate at 512 tokens. If you regularly feed multi-page documents in one shot, <code>nomic-embed-text-v1</code>'s 8192-token window saves you from chunking logic — at the cost of more compute per embedding and a 540 MB model.</p>
+          <p>Four of the five presets truncate at 512 tokens. If you regularly feed multi-page documents in one shot, <code>nomic-embed-text-v1</code>'s 8192-token window saves you from chunking logic — at the cost of more compute per embedding and a 540 MB model.</p>
           <p>For most uses, chunking <em>and</em> using a cheaper 512-token model is the better trade. Nomic wins when the chunking itself hurts retrieval quality (e.g. legal contracts, research papers).</p>
         </div>
       </div>
@@ -119,7 +119,6 @@
         <tr><td>English default, no special requirements</td><td class="mono">all-MiniLM-L6-v2</td></tr>
         <tr><td>English, quality matters, can spend the disk</td><td class="mono">all-mpnet-base-v2</td></tr>
         <tr><td>BEIR-style benchmarks, English</td><td class="mono">bge-small-en-v1.5</td></tr>
-        <tr><td>Mixed-language corpus</td><td class="mono">multilingual-e5-small</td></tr>
         <tr><td>Long documents, no chunking</td><td class="mono">nomic-embed-text-v1</td></tr>
         <tr><td>Same geometry as the default, more recall</td><td class="mono">all-MiniLM-L12-v2</td></tr>
       </tbody>
@@ -131,6 +130,9 @@
 
     <h2>Something weirder?</h2>
     <p>If none of the presets match — domain-specific models like <code>BioBERT</code>, instruction-tuned retrievers, custom fine-tunes — the <a href="05-custom-models.html"><code>--from-huggingface</code> escape hatch</a> handles it. You supply pooling, dims, and max-length; the loader handles everything else.</p>
+
+    <h3>Not supported: SentencePiece-based multilingual models</h3>
+    <p>Models like <code>intfloat/multilingual-e5-small</code> use SentencePiece/Unigram tokenizers. These can't be expressed as the BertTokenizer ONNX op Oracle needs. If you try to load one, onnx2oracle raises a clear <code>NotImplementedError</code> pointing you at WordPiece-based multilingual alternatives (e.g. <code>microsoft/Multilingual-MiniLM-L12-H384</code>).</p>
 
     <hr>
     <div class="row-wrap" style="justify-content:space-between;">

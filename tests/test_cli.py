@@ -11,14 +11,13 @@ def test_cli_help_succeeds():
     assert "onnx2oracle" in result.stdout.lower()
 
 
-def test_presets_command_lists_all_six():
+def test_presets_command_lists_all():
     result = runner.invoke(app, ["presets"])
     assert result.exit_code == 0
     for name in [
         "all-MiniLM-L6-v2",
         "all-MiniLM-L12-v2",
         "all-mpnet-base-v2",
-        "multilingual-e5-small",
         "bge-small-en-v1.5",
         "nomic-embed-text-v1",
     ]:

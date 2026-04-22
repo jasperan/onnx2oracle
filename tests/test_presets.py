@@ -3,12 +3,11 @@ import pytest
 from onnx2oracle.presets import PRESETS, ModelSpec, get_preset
 
 
-def test_all_six_presets_registered():
+def test_all_presets_registered():
     expected = {
         "all-MiniLM-L6-v2",
         "all-MiniLM-L12-v2",
         "all-mpnet-base-v2",
-        "multilingual-e5-small",
         "bge-small-en-v1.5",
         "nomic-embed-text-v1",
     }

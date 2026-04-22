@@ -51,7 +51,6 @@ The augmented ONNX pipeline is the interesting bit. HuggingFace ships a Python t
 | `all-MiniLM-L6-v2` | 384 | 90 MB | mean |
 | `all-MiniLM-L12-v2` | 384 | 130 MB | mean |
 | `all-mpnet-base-v2` | 768 | 420 MB | mean |
-| `multilingual-e5-small` | 384 | 470 MB | mean |
 | `bge-small-en-v1.5` | 384 | 130 MB | cls |
 | `nomic-embed-text-v1` | 768 | 540 MB | mean |
 

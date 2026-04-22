@@ -44,14 +44,6 @@ PRESETS: dict[str, ModelSpec] = {
         oracle_name="ALL_MPNET_BASE_V2",
         approx_size_mb=420,
     ),
-    "multilingual-e5-small": ModelSpec(
-        hf_repo="intfloat/multilingual-e5-small",
-        dims=384,
-        pooling="mean",
-        normalize=True,
-        oracle_name="MULTILINGUAL_E5_SMALL",
-        approx_size_mb=470,
-    ),
     "bge-small-en-v1.5": ModelSpec(
         hf_repo="BAAI/bge-small-en-v1.5",
         dims=384,
