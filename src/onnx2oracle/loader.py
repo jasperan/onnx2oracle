@@ -7,6 +7,7 @@ import logging
 
 import oracledb
 
+from onnx2oracle._ident import validate_oracle_name
 from onnx2oracle.connection import DSN
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ def build_metadata_json() -> str:
 
 
 def model_exists(conn: oracledb.Connection, oracle_name: str) -> bool:
+    validate_oracle_name(oracle_name)
     cur = conn.cursor()
     cur.execute(
         "SELECT COUNT(*) FROM user_mining_models WHERE model_name = :name",
@@ -39,6 +41,7 @@ def model_exists(conn: oracledb.Connection, oracle_name: str) -> bool:
 
 def drop_model(conn: oracledb.Connection, oracle_name: str) -> None:
     """Drop a previously-registered ONNX model. Uses DBMS_VECTOR.DROP_ONNX_MODEL."""
+    validate_oracle_name(oracle_name)
     cur = conn.cursor()
     cur.execute(
         "BEGIN DBMS_VECTOR.DROP_ONNX_MODEL(model_name => :n, force => TRUE); END;",
@@ -59,8 +62,14 @@ def upload_model(
       - force=False: log and return (idempotent no-op).
       - force=True: drop and re-upload.
     """
+    validate_oracle_name(oracle_name)
     logger.info("Connecting to %s ...", dsn.display())
-    conn = oracledb.connect(user=dsn.user, password=dsn.password, dsn=dsn.to_oracle_dsn())
+    conn = oracledb.connect(
+        user=dsn.user,
+        password=dsn.password,
+        dsn=dsn.to_oracle_dsn(),
+        tcp_connect_timeout=30,
+    )
     try:
         if model_exists(conn, oracle_name):
             if not force:

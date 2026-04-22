@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 import oracledb
 
+from onnx2oracle._ident import validate_oracle_name
 from onnx2oracle.connection import DSN
 
 logger = logging.getLogger(__name__)
@@ -32,9 +33,10 @@ class VerifyResult:
 
 
 def _embed(conn: oracledb.Connection, model_name: str, text: str) -> list[float]:
+    safe = validate_oracle_name(model_name)
     cur = conn.cursor()
     cur.execute(
-        f"SELECT VECTOR_EMBEDDING({model_name} USING :t AS DATA) FROM dual",
+        f"SELECT VECTOR_EMBEDDING({safe} USING :t AS DATA) FROM dual",
         {"t": text},
     )
     row = cur.fetchone()
@@ -57,8 +59,16 @@ def smoke_test(dsn: DSN, oracle_name: str) -> VerifyResult:
     """Connect, confirm registration, embed a sample, check cosine sanity."""
     t0 = time.perf_counter()
     try:
+        validate_oracle_name(oracle_name)
+    except ValueError as e:
+        return VerifyResult(False, False, None, None, False, 0, str(e))
+
+    try:
         conn = oracledb.connect(
-            user=dsn.user, password=dsn.password, dsn=dsn.to_oracle_dsn()
+            user=dsn.user,
+            password=dsn.password,
+            dsn=dsn.to_oracle_dsn(),
+            tcp_connect_timeout=30,
         )
     except Exception as e:
         return VerifyResult(False, False, None, None, False, 0, str(e))
