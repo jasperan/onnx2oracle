@@ -63,10 +63,44 @@ def build_augmented(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
     core_model = onnx.load(core_path)
 
     # 2) Generate tokenizer ONNX
+    # Some tokenizer classes (MPNetTokenizer, XLMRobertaTokenizer) are not
+    # supported by gen_processing_models, or produce non-BERT output names
+    # (tokens/instance_indices/token_indices instead of input_ids/...).
+    # Fallback: BertTokenizerFast shares the WordPiece vocabulary and produces
+    # the standard input_ids/token_type_ids/attention_mask outputs that the
+    # core transformer expects.
     tokenizer = AutoTokenizer.from_pretrained(spec.hf_repo, **cache_kwargs)
-    pre_model, _ = gen_processing_models(
-        tokenizer, pre_kwargs={}, post_kwargs=None, opset=14
-    )
+    try:
+        pre_model, _ = gen_processing_models(
+            tokenizer, pre_kwargs={}, post_kwargs=None, opset=14
+        )
+        pre_output_names = {o.name for o in pre_model.graph.output}
+        if "input_ids" not in pre_output_names:
+            raise ValueError(
+                f"gen_processing_models produced unexpected outputs: {pre_output_names}"
+            )
+    except (ValueError, Exception) as _tok_err:
+        logger.warning(
+            "Tokenizer %s not directly supported by gen_processing_models (%s); "
+            "falling back to BertTokenizerFast.",
+            type(tokenizer).__name__,
+            _tok_err,
+        )
+        from transformers import BertTokenizerFast
+        tokenizer = BertTokenizerFast.from_pretrained(spec.hf_repo, **cache_kwargs)
+        # Guard: BertTokenizerFast requires a WordPiece vocab with [UNK].
+        # SentencePiece-based models (XLM-R, T5, mE5) use <unk> instead and
+        # will produce an ONNX that Oracle rejects at load time.
+        if "[UNK]" not in tokenizer.get_vocab():
+            raise NotImplementedError(
+                f"{spec.hf_repo} uses a SentencePiece/Unigram tokenizer "
+                f"({type(tokenizer).__name__}) which cannot be represented as a "
+                f"BertTokenizer ONNX graph compatible with Oracle's DBMS_VECTOR. "
+                f"Use a model with a WordPiece vocabulary (BertTokenizer family)."
+            )
+        pre_model, _ = gen_processing_models(
+            tokenizer, pre_kwargs={}, post_kwargs=None, opset=14
+        )
 
     # 3) Align opsets — bump core to 18 + copy custom domains from pre
     core_model = version_converter.convert_version(core_model, 18)
@@ -80,10 +114,17 @@ def build_augmented(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
             new_o.version = o.version
 
     # 4) Unsqueeze tokenizer outputs: [seq_len] -> [1, seq_len]
+    # Only process the tensor names that actually exist in the pre-model outputs
+    # (e.g. MPNet has no token_type_ids input in its core model).
+    pre_output_names = {o.name for o in pre_model.graph.output}
+    core_input_names = {i.name for i in core_model.graph.input}
+    bert_tensor_names = [n for n in ("input_ids", "token_type_ids", "attention_mask")
+                         if n in pre_output_names]
+
     axes_0 = numpy_helper.from_array(np.array([0], dtype=np.int64), name="unsqueeze_axes_0")
     pre_model.graph.initializer.append(axes_0)
 
-    for name in ("input_ids", "token_type_ids", "attention_mask"):
+    for name in bert_tensor_names:
         flat_name = f"{name}_flat"
         for node in pre_model.graph.node:
             for i, out in enumerate(node.output):
@@ -100,11 +141,10 @@ def build_augmented(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
                 shape.dim.add().dim_value = 1
                 shape.dim.add().dim_param = "sequence_length"
 
-    # 5) Merge pre + core
+    # 5) Merge pre + core — only connect tensors present in both graphs
     io_map = [
-        ("input_ids", "input_ids"),
-        ("attention_mask", "attention_mask"),
-        ("token_type_ids", "token_type_ids"),
+        (n, n) for n in ("input_ids", "attention_mask", "token_type_ids")
+        if n in pre_output_names and n in core_input_names
     ]
     merged = compose.merge_models(
         pre_model, core_model, io_map=io_map, prefix1="pre_", prefix2="core_"
