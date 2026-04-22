@@ -82,7 +82,7 @@
           <p>With no <code>--target</code> or <code>--dsn</code>, the loader uses the local compose DSN:
             <code>system/onnx2oracle@localhost:1521/FREEPDB1</code>. The augmented ONNX is built in memory and
             streamed to Oracle as a BLOB — nothing touches the filesystem of the database container.</p>
-          <pre><code>$ onnx2oracle load all-MiniLM-L6-v2
+          <pre><code>$ onnx2oracle load all-MiniLM-L6-v2 --target local
   downloading sentence-transformers/all-MiniLM-L6-v2 (90 MB)
   wrapping tokenizer (onnxruntime-extensions)
   adding mean pool + L2 norm
@@ -98,7 +98,7 @@
           <h3>Verify</h3>
           <p><code>verify</code> embeds a canned string twice, asserts the output is 384-d float32, and confirms
             <code>cosine(v, v) = 1.0</code>. If that fails, the issue is in the graph, not your app.</p>
-          <pre><code>$ onnx2oracle verify
+          <pre><code>$ onnx2oracle verify --target local
   model: ALL_MINILM_L6_V2
   VECTOR_EMBEDDING(...) returned 384-d ... ok
   cosine(self, self) = 1.000000 ... ok
