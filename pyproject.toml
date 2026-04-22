@@ -1,6 +1,6 @@
 [project]
 name = "onnx2oracle"
-version = "0.1.0"
+version = "0.1.1"
 description = "Load ONNX embedding models into Oracle AI Database with one command"
 readme = "README.md"
 license = { text = "MIT" }
