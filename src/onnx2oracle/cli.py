@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
+from importlib.resources import files
 from pathlib import Path
 
 import typer
@@ -153,7 +155,7 @@ def verify(
 
 # Docker subcommands
 
-DOCKER_COMPOSE = Path(__file__).parent.parent.parent / "docker" / "docker-compose.yml"
+DOCKER_COMPOSE = files("onnx2oracle") / "data" / "docker-compose.yml"
 
 
 def _compose(*args: str) -> int:
