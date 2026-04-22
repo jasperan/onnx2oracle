@@ -1,100 +1,244 @@
-# onnx2oracle
+<h1 align="center">onnx2oracle</h1>
 
-**Load ONNX embedding models into Oracle AI Database with one command.**
+<p align="center">
+  <strong>Load ONNX embedding models into Oracle AI Database with one command.</strong> Zero network round-trips. Embeddings generated inside the DB.
+</p>
 
-[![CI](https://github.com/jasperan/onnx2oracle/actions/workflows/ci.yml/badge.svg)](https://github.com/jasperan/onnx2oracle/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://jasperan.github.io/onnx2oracle/)
-[![PyPI](https://img.shields.io/pypi/v/onnx2oracle.svg)](https://pypi.org/project/onnx2oracle/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.10+" />
+  <img src="https://img.shields.io/badge/Oracle_AI_Database-26ai_Free-F80000?style=for-the-badge&logo=oracle&logoColor=white" alt="Oracle AI Database 26ai Free" />
+  <img src="https://img.shields.io/badge/ONNX-Runtime-005CED?style=for-the-badge&logo=onnx&logoColor=white" alt="ONNX Runtime" />
+  <a href="https://pypi.org/project/onnx2oracle/"><img src="https://img.shields.io/pypi/v/onnx2oracle.svg?style=for-the-badge&logo=pypi&logoColor=white&label=PyPI&color=3775A9" alt="PyPI" /></a>
+  <a href="https://jasperan.github.io/onnx2oracle/"><img src="https://img.shields.io/badge/docs-github%20pages-222?style=for-the-badge&logo=github&logoColor=white" alt="Docs" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge" alt="License: MIT" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jasperan/onnx2oracle/actions/workflows/ci.yml"><img src="https://github.com/jasperan/onnx2oracle/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/jasperan/onnx2oracle/actions/workflows/pages.yml"><img src="https://github.com/jasperan/onnx2oracle/actions/workflows/pages.yml/badge.svg" alt="Pages" /></a>
+</p>
+
+---
+
+`onnx2oracle` ships HuggingFace sentence-transformer models straight into **Oracle AI Database 26ai** via `DBMS_VECTOR.LOAD_ONNX_MODEL`. Once the model is registered, `VECTOR_EMBEDDING(MODEL USING :text AS DATA)` runs the full tokenizer, transformer, pooling, and L2 normalization entirely in-database. No external embedding API, no sidecar serving layer, no PII leaking to third parties.
+
+## Deck at a Glance
+
+> **Full interactive presentation**: open [`docs/presentation.html`](docs/presentation.html) in a browser for all 22 slides with arrow-key navigation, 1-9 jumps, and a light/dark toggle.
+
+<table>
+<tr>
+<td align="center"><strong>Title</strong><br><img src="docs/slides/01.png" alt="onnx2oracle" width="400"/></td>
+<td align="center"><strong>3-Command Demo</strong><br><img src="docs/slides/04.png" alt="Three-command demo" width="400"/></td>
+</tr>
+<tr>
+<td align="center"><strong>Augmented Pipeline</strong><br><img src="docs/slides/07.png" alt="Augmented ONNX pipeline" width="400"/></td>
+<td align="center"><strong>Supported Presets</strong><br><img src="docs/slides/14.png" alt="The 5 presets" width="400"/></td>
+</tr>
+<tr>
+<td align="center"><strong>Security</strong><br><img src="docs/slides/18.png" alt="Identifier whitelist" width="400"/></td>
+<td align="center"><strong>Proof It Works</strong><br><img src="docs/slides/20.png" alt="Integration test numbers" width="400"/></td>
+</tr>
+</table>
+
+## Why Oracle AI Database?
+
+- **In-database ONNX embeddings**: run the full pipeline with `VECTOR_EMBEDDING()`. Zero network latency. No API keys to rotate.
+- **AI Vector Search**: semantic recall via `VECTOR_DISTANCE()` with COSINE, EUCLIDEAN, or DOT similarity.
+- **ACID-native**: embedding writes are part of your transactions. Crash-safe by default.
+- **Data locality**: text never leaves your database. No third-party terms of service to chase.
+- **Free locally**: [Oracle AI Database 26ai Free](https://www.oracle.com/database/free/) runs in a Docker container with full vector support.
+
+## The Augmented Pipeline
+
+HuggingFace ships a Python tokenizer object. Oracle needs a self-contained ONNX graph it can call from SQL. `onnx2oracle` bridges the gap in 6 stages:
+
+1. **Download** the core transformer ONNX via `huggingface_hub`.
+2. **Wrap the tokenizer** as ONNX ops via `onnxruntime_extensions.gen_processing_models`.
+3. **Align opsets** (bump core to 18) and **merge** via `onnx.compose.merge_models` with `prefix1="pre_"`.
+4. **Pool**: `ReduceMean(axis=1)` for mean pooling, `Gather(axis=1, [0]) + Squeeze` for CLS.
+5. **L2-normalize**: `Pow(2) → ReduceSum(-1) → Sqrt → Max(eps=1e-12) → Div`.
+6. **Upload**: `DBMS_VECTOR.LOAD_ONNX_MODEL(model_name, model_data, metadata)` with raw bytes. No filesystem staging.
+
+Result: a single ONNX graph with input `pre_text: string` and output `embedding: float32[dims]` that Oracle invokes row by row.
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.10+
+- Docker (for the local [Oracle AI Database 26ai Free](https://www.oracle.com/database/free/) container) or any Oracle 23ai/26ai instance
+- ~2 GB free RAM during model augmentation; ~1 GB DB storage per preset
+
+### 1. Install
 
 ```bash
 pip install onnx2oracle
-onnx2oracle docker up
-onnx2oracle load all-MiniLM-L6-v2 --target local
-onnx2oracle verify --target local
 ```
 
-Embeddings run entirely in-database via Oracle's `VECTOR_EMBEDDING` (no external API calls, no network round-trips, no serving layer).
+### 2. Start Oracle
 
-## How it works
+```bash
+onnx2oracle docker up --wait
+```
 
-`onnx2oracle` downloads a sentence-transformer model from HuggingFace, wraps its tokenizer as ONNX ops, merges it with the transformer body, and appends pooling + L2 normalization. The resulting single-graph ONNX is uploaded to Oracle via `DBMS_VECTOR.LOAD_ONNX_MODEL`, after which you can query it with:
+First start is slow (3-5 min while the PDB opens). Subsequent starts are ~30 seconds.
+
+### 3. Load a model
+
+```bash
+onnx2oracle load all-MiniLM-L6-v2 --target local
+```
+
+### 4. Verify
+
+```bash
+onnx2oracle verify --target local
+# ✓ Connected
+# ✓ Model ALL_MINILM_L6_V2 registered
+# ✓ Sample embedding: 384 dims (norm=1.0000)
+# ✓ Similarity sanity (king/queen > king/banana)
+```
+
+### 5. Query
 
 ```sql
-SELECT VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING 'hello world' AS DATA) FROM dual;
+SELECT VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING 'hello world' AS DATA) AS v
+FROM dual;
 ```
-
-## Architecture
-
-See [Architecture Diagram](docs/architecture.excalidraw) (Excalidraw, open at [excalidraw.com](https://excalidraw.com)) and [Architecture Overview](docs/architecture.html) for visual documentation of how the pieces fit together.
-
-The augmented ONNX pipeline is the interesting bit. HuggingFace ships a Python tokenizer; Oracle needs an ONNX graph it can call directly. `pipeline.py` wraps the fast tokenizer as ONNX ops via `onnxruntime-extensions`, welds it onto the transformer body, bolts mean- or CLS-pooling on top, appends L2 normalization, and emits a single graph that goes string to float32 vector. That's what gets uploaded via `DBMS_VECTOR.LOAD_ONNX_MODEL`.
-
-## Directory Structure
-
-    src/onnx2oracle/
-    ├── cli.py            # Typer commands: load, verify, presets, docker, config
-    ├── presets.py        # 6 curated ModelSpecs
-    ├── connection.py     # DSN resolution (CLI > env > toml > target > prompt)
-    ├── pipeline.py       # HF model -> augmented ONNX bytes
-    ├── loader.py         # DBMS_VECTOR.LOAD_ONNX_MODEL wrapper
-    └── verify.py         # Smoke test via VECTOR_EMBEDDING
-    docker/
-    └── docker-compose.yml  # Oracle 26ai Free (gvenzl fallback documented)
-    docs/                 # GitHub Pages site + architecture docs
-    tests/                # Unit + integration (needs --run-integration)
 
 ## Presets
 
-| Preset | Dims | Size | Pooling |
-|---|---|---|---|
-| `all-MiniLM-L6-v2` | 384 | 90 MB | mean |
-| `all-MiniLM-L12-v2` | 384 | 130 MB | mean |
-| `all-mpnet-base-v2` | 768 | 420 MB | mean |
-| `bge-small-en-v1.5` | 384 | 130 MB | cls |
-| `nomic-embed-text-v1` | 768 | 540 MB | mean |
+All 5 presets verified end-to-end against a live Oracle 26ai Free container.
 
-Any sentence-transformer-style HuggingFace model also works via `--from-huggingface`.
+| Preset | HuggingFace repo | Dims | Size (FP32) | Pooling | Oracle name |
+|---|---|---|---|---|---|
+| `all-MiniLM-L6-v2` | sentence-transformers/all-MiniLM-L6-v2 | 384 | ~90 MB | mean | `ALL_MINILM_L6_V2` |
+| `all-MiniLM-L12-v2` | sentence-transformers/all-MiniLM-L12-v2 | 384 | ~130 MB | mean | `ALL_MINILM_L12_V2` |
+| `all-mpnet-base-v2` | sentence-transformers/all-mpnet-base-v2 | 768 | ~420 MB | mean | `ALL_MPNET_BASE_V2` |
+| `bge-small-en-v1.5` | BAAI/bge-small-en-v1.5 | 384 | ~130 MB | cls | `BGE_SMALL_EN_V1_5` |
+| `nomic-embed-text-v1` | nomic-ai/nomic-embed-text-v1 | 768 | ~540 MB | mean | `NOMIC_EMBED_TEXT_V1` |
 
-## Common tasks
+Any sentence-transformer-style model also works via `--from-huggingface`:
 
 ```bash
-# List all presets
-onnx2oracle presets
-
-# Load into a cloud ADB
-onnx2oracle load all-mpnet-base-v2 --dsn 'app/pass@adb.region.oraclecloud.com:1522/xxx_high'
-
-# Load a non-preset model
 onnx2oracle load --from-huggingface BAAI/bge-base-en-v1.5 \
   --pooling cls --normalize --dims 768 --name BGE_BASE_EN_V1_5
-
-# End-to-end verification
-onnx2oracle verify --target local
 ```
 
-## Requirements
+**Known limitation**: SentencePiece-based multilingual models (like `intfloat/multilingual-e5-small`) can't round-trip to Oracle's BertTokenizer op. `onnx2oracle` raises a clear `NotImplementedError` pointing at WordPiece alternatives.
 
-- Python 3.10+
-- Docker (for the local Oracle 26ai Free path) or any Oracle 23ai/26ai instance
-- ~2 GB free RAM during model augmentation
-- ~1 GB DB storage per preset
+## CLI Reference
 
-## Documentation
+```
+onnx2oracle version
+onnx2oracle presets                    # List the 5 curated presets
+onnx2oracle docker up [--wait]         # Start Oracle 26ai Free container
+onnx2oracle docker down                # Stop + remove container
+onnx2oracle docker logs [-f]           # Tail container logs
 
-Full guide at **[jasperan.github.io/onnx2oracle](https://jasperan.github.io/onnx2oracle/)**.
+onnx2oracle load <preset> [--target local | --dsn ...] [--force]
+onnx2oracle load --from-huggingface <repo> --pooling {mean,cls} \
+                 --dims N --name ORACLE_NAME [--target local | --dsn ...]
 
-## Development
+onnx2oracle verify [--target local | --dsn ...] [--name ORACLE_NAME]
+
+onnx2oracle config show
+onnx2oracle config set key=value       # Write to ~/.onnx2oracle/config.toml
+```
+
+## DSN Resolution
+
+Connections resolve in this order:
+
+1. `--dsn user/pw@host:port/service` flag
+2. `ORACLE_DSN` env var
+3. `~/.onnx2oracle/config.toml` (`[default] dsn = "..."`)
+4. `--target local` shortcut (`system/onnx2oracle@localhost:1521/FREEPDB1`)
+5. Interactive prompt (password masked)
+
+If none of the above are set, the CLI auto-defaults to `--target local` for a painless docker-compose workflow.
+
+## Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `ORACLE_DSN` | Full DSN: `user/password@host:port/service` | — |
+| `ORACLE_PWD` | Password for the docker-compose container | `onnx2oracle` |
+| `HF_HOME` | HuggingFace cache directory | `~/.cache/huggingface` |
+| `HF_TOKEN` | HuggingFace API token (for gated models) | — |
+
+## Architecture
+
+```
+onnx2oracle/
+├── src/onnx2oracle/
+│   ├── cli.py           # Typer commands: load, verify, presets, docker, config
+│   ├── presets.py       # 5 curated ModelSpecs
+│   ├── connection.py    # DSN resolution (CLI > env > toml > target > prompt)
+│   ├── pipeline.py      # HF model -> augmented ONNX bytes (tokenizer + pool + L2)
+│   ├── loader.py        # DBMS_VECTOR.LOAD_ONNX_MODEL wrapper with idempotency
+│   ├── verify.py        # Smoke test via VECTOR_EMBEDDING + cosine sanity
+│   ├── _ident.py        # Oracle identifier whitelist (SQL-injection guard)
+│   └── data/
+│       └── docker-compose.yml   # Shipped in the wheel, honors ORACLE_PWD
+├── docker/
+│   └── docker-compose.yml       # Dev-only copy for git clone workflow
+├── docs/                         # GitHub Pages site + 22-slide presentation
+├── tests/                        # 19 unit + 2 slow + 1 integration test
+└── .github/workflows/            # CI matrix (3.10/3.11/3.12) + Pages deploy
+```
+
+## Testing
 
 ```bash
-git clone https://github.com/jasperan/onnx2oracle
+git clone https://github.com/jasperan/onnx2oracle.git
 cd onnx2oracle
 conda create -n onnx2oracle python=3.12 -y
 conda activate onnx2oracle
 pip install -e ".[dev]"
-pytest tests/ -v -m "not slow and not integration"
+
+pytest tests/ -v -m "not slow and not integration"   # 19 unit tests, seconds
+
+# Slow tests (real HF downloads, no DB):
+pytest tests/test_pipeline.py -v -m slow
+
+# Integration test against a live Oracle 26ai Free container:
+ORACLE_DSN='system/yourpw@localhost:1521/FREEPDB1' \
+  pytest tests/test_loader_integration.py --run-integration -v
 ```
+
+## Security
+
+- **SQL-identifier whitelist** (`^[A-Z_][A-Z0-9_]{0,127}$`) on every model name before it's interpolated into `VECTOR_EMBEDDING`. Bind variables are used for all other parameters.
+- Oracle's `VECTOR_EMBEDDING` takes the model identifier as a SQL token (not bindable), so the whitelist is the guardrail. Attempted injections raise `ValueError` before the query runs.
+- No wallet files or secrets are ever committed. The `docker-compose.yml` honors `ORACLE_PWD` so you can override the local-dev default.
+
+## Sister Projects
+
+- [PicoOraClaw](https://github.com/jasperan/picooraclaw) — Go-based autonomous agent on Oracle 26ai
+- [IronOraClaw](https://github.com/jasperan/ironoraclaw) — Rust secure AI assistant on Oracle 26ai
+- [ZeroOraClaw](https://github.com/jasperan/zerooraclaw) — Rust zero-overhead agent on Oracle 26ai
+- [OracLaw](https://github.com/jasperan/oraclaw) — TypeScript + Python sidecar on Oracle 26ai
+- [TinyOraClaw](https://github.com/jasperan/tinyoraclaw) — TypeScript multi-agent on Oracle 26ai
+
+## Credits
+
+- [Oracle AI Database 26ai Free](https://www.oracle.com/database/free/) — the in-database ONNX runtime
+- [HuggingFace](https://huggingface.co/) — the model and tokenizer ecosystem
+- [onnxruntime-extensions](https://github.com/microsoft/onnxruntime-extensions) — tokenizer as ONNX ops
+- [python-oracledb](https://oracle.github.io/python-oracledb/) — the thin-mode driver
 
 ## License
 
 MIT.
+
+---
+
+<div align="center">
+
+[![GitHub](https://img.shields.io/badge/GitHub-jasperan-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jasperan)&nbsp;
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-jasperan-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/jasperan/)&nbsp;
+[![Oracle](https://img.shields.io/badge/Oracle_AI_Database-26ai_Free-F80000?style=for-the-badge&logo=oracle&logoColor=white)](https://www.oracle.com/database/free/)
+
+</div>
