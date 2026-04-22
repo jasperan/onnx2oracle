@@ -5,10 +5,11 @@ from __future__ import annotations
 import os
 import re
 import sys
-import tomllib
 from dataclasses import dataclass
 from getpass import getpass
 from pathlib import Path
+
+import tomllib
 
 DEFAULT_CONFIG_PATH = Path.home() / ".onnx2oracle" / "config.toml"
 
@@ -22,7 +23,7 @@ class DSN:
     service: str
 
     @classmethod
-    def parse(cls, raw: str) -> "DSN":
+    def parse(cls, raw: str) -> DSN:
         # user/password@host:port/service — password may contain '@'; split on the LAST
         # '@...<host>:<port>/<service>' suffix.
         m = re.match(r"^(?P<user>[^/]+)/(?P<rest>.+)$", raw)

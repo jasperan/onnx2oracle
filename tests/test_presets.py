@@ -1,4 +1,5 @@
 import pytest
+
 from onnx2oracle.presets import PRESETS, ModelSpec, get_preset
 
 
