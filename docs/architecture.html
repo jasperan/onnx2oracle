@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>onnx2oracle | architecture overview</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --bg-card: #151a21;
+    --bg-accent: #1c232d;
+    --fg: #e6edf3;
+    --fg-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #7ee787;
+    --accent-3: #ffa657;
+    --accent-4: #d2a8ff;
+    --border: #30363d;
+    --mono: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.6;
+    padding: 48px 24px;
+  }
+  .container { max-width: 1180px; margin: 0 auto; }
+  header { margin-bottom: 48px; border-bottom: 1px solid var(--border); padding-bottom: 32px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  h1 { font-size: 42px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px; }
+  h2 {
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 56px 0 24px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; color: var(--fg); }
+  .subtitle { color: var(--fg-muted); font-size: 17px; max-width: 720px; }
+  .audience-badge {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 6px 12px;
+    background: rgba(210, 168, 255, 0.12);
+    border: 1px solid var(--accent-4);
+    border-radius: 6px;
+    color: var(--accent-4);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .stack-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 24px 0; }
+  .badge {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: var(--bg-accent);
+    border: 1px solid var(--border);
+    color: var(--fg);
+  }
+  .badge.py { border-color: var(--accent); color: var(--accent); }
+  .badge.onnx { border-color: var(--accent-3); color: var(--accent-3); }
+  .badge.oracle { border-color: var(--accent-2); color: var(--accent-2); }
+  .badge.hf { border-color: var(--accent-4); color: var(--accent-4); }
+  .modules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .module-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    transition: border-color 0.2s;
+  }
+  .module-card:hover { border-color: var(--accent); }
+  .module-card .name {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .module-card .responsibility { font-size: 15px; color: var(--fg); margin-bottom: 12px; }
+  .module-card .deps {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-muted);
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+  }
+  .deps-label { color: var(--accent-3); }
+  .mermaid-wrap {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    overflow-x: auto;
+  }
+  .stages {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+    counter-reset: stage;
+  }
+  .stage {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent-3);
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+    counter-increment: stage;
+  }
+  .stage::before {
+    content: counter(stage);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent-3);
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    opacity: 0.6;
+  }
+  .stage .title {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent-3);
+    margin-bottom: 6px;
+  }
+  .stage .desc { font-size: 14px; color: var(--fg); }
+  .dsn-list {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+  .dsn-item { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px dashed var(--border); }
+  .dsn-item:last-child { border-bottom: none; }
+  .dsn-rank {
+    background: var(--accent);
+    color: var(--bg);
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .dsn-source { color: var(--accent-2); flex-shrink: 0; width: 140px; }
+  .dsn-example { color: var(--fg-muted); font-size: 12px; }
+  .arrow { color: var(--accent-4); font-size: 16px; }
+  footer {
+    margin-top: 72px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--fg-muted);
+    font-size: 13px;
+    text-align: center;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="eyebrow">architecture overview</div>
+    <h1>onnx2oracle</h1>
+    <p class="subtitle">How HuggingFace embedding models get welded into Oracle AI Database as single-graph ONNX, uploaded through DBMS_VECTOR, and queried via VECTOR_EMBEDDING.</p>
+    <div class="audience-badge">// contributor-facing doc (not the user guide)</div>
+    <div class="stack-row">
+      <span class="badge py">Python 3.10+</span>
+      <span class="badge py">Typer CLI</span>
+      <span class="badge onnx">onnx</span>
+      <span class="badge onnx">onnxruntime</span>
+      <span class="badge onnx">onnxruntime-extensions</span>
+      <span class="badge hf">transformers</span>
+      <span class="badge hf">huggingface-hub</span>
+      <span class="badge oracle">oracledb (thin)</span>
+      <span class="badge oracle">Oracle 26ai Free</span>
+    </div>
+  </header>
+
+  <h2>Modules</h2>
+  <div class="modules-grid">
+    <div class="module-card">
+      <div class="name">cli.py</div>
+      <div class="responsibility">Typer commands: <code>load</code>, <code>verify</code>, <code>presets</code>, <code>docker</code>, <code>config</code>. Thin orchestrator that wires the other modules together.</div>
+      <div class="deps"><span class="deps-label">deps:</span> typer, rich</div>
+    </div>
+    <div class="module-card">
+      <div class="name">presets.py</div>
+      <div class="responsibility">Frozen <code>ModelSpec</code> dataclasses for 6 curated embedding models. Knows dims, size, pooling strategy, HF repo ID, and Oracle model name per preset.</div>
+      <div class="deps"><span class="deps-label">deps:</span> stdlib only</div>
+    </div>
+    <div class="module-card">
+      <div class="name">connection.py</div>
+      <div class="responsibility">Resolves a DSN by checking CLI args, env vars, a toml file, the <code>--target local</code> shortcut, and finally an interactive prompt. Returns an <code>OracleConnection</code> record.</div>
+      <div class="deps"><span class="deps-label">deps:</span> oracledb, tomllib</div>
+    </div>
+    <div class="module-card">
+      <div class="name">pipeline.py</div>
+      <div class="responsibility">The interesting bit. Downloads an HF model, wraps its fast tokenizer as ONNX ops, merges graphs, appends pooling + L2 norm, emits a single string-to-vector graph.</div>
+      <div class="deps"><span class="deps-label">deps:</span> onnx, onnxruntime-extensions, transformers, huggingface-hub</div>
+    </div>
+    <div class="module-card">
+      <div class="name">loader.py</div>
+      <div class="responsibility">Uploads the augmented ONNX bytes via <code>DBMS_VECTOR.LOAD_ONNX_MODEL</code> over a thin oracledb session. Handles chunked transfer for models larger than 500 MB.</div>
+      <div class="deps"><span class="deps-label">deps:</span> oracledb</div>
+    </div>
+    <div class="module-card">
+      <div class="name">verify.py</div>
+      <div class="responsibility">Smoke test: runs <code>VECTOR_EMBEDDING</code> against a loaded model, checks shape + L2 norm, confirms king/queen &gt; king/banana on cosine similarity.</div>
+      <div class="deps"><span class="deps-label">deps:</span> oracledb</div>
+    </div>
+  </div>
+
+  <h2>Data flow</h2>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+flowchart TD
+    U([user]) --> CLI["onnx2oracle CLI<br/>(cli.py)"]
+    CLI --> CONN["connection.py<br/>DSN resolver"]
+    CONN -.-> DSN{{"DSN precedence:<br/>CLI &gt; env &gt; toml &gt; target &gt; prompt"}}
+    CONN --> SRC["presets.py<br/>or --from-huggingface"]
+    SRC --> PIPE["pipeline.py<br/>HF model + tokenizer<br/>-&gt; augmented ONNX"]
+    PIPE -- bytes --> LOAD["loader.py<br/>DBMS_VECTOR.LOAD_ONNX_MODEL"]
+    LOAD --> DB[("Oracle 26ai Free<br/>or Cloud ADB")]
+    DB --> VER["verify.py<br/>VECTOR_EMBEDDING<br/>+ cosine sanity"]
+
+    classDef cli fill:#1c232d,stroke:#58a6ff,color:#e6edf3
+    classDef py fill:#1c232d,stroke:#ffa657,color:#e6edf3
+    classDef db fill:#1c232d,stroke:#7ee787,color:#e6edf3
+    classDef dsn fill:#151a21,stroke:#d2a8ff,color:#d2a8ff,stroke-dasharray: 4 3
+    class CLI cli
+    class CONN,SRC,PIPE,LOAD py
+    class DB db
+    class DSN dsn
+    class VER db
+    </div>
+  </div>
+
+  <h2>How the augmented ONNX is built</h2>
+  <p style="color: var(--fg-muted); margin-bottom: 12px;">Oracle's <code>VECTOR_EMBEDDING</code> needs a single self-contained graph that goes string in, float32 vector out. HuggingFace ships a Python tokenizer separate from the model. <code>pipeline.py</code> welds them together in 8 stages.</p>
+  <div class="stages">
+    <div class="stage"><div class="title">download</div><div class="desc">Pull the model repo from HuggingFace Hub (config + tokenizer + weights).</div></div>
+    <div class="stage"><div class="title">tokenizer as ONNX</div><div class="desc">Emit the fast tokenizer as ONNX ops using <code>onnxruntime-extensions</code>.</div></div>
+    <div class="stage"><div class="title">opset align</div><div class="desc">Normalize opset versions between tokenizer graph and transformer body so <code>onnx.compose.merge_models</code> accepts both.</div></div>
+    <div class="stage"><div class="title">Unsqueeze</div><div class="desc">Add a batch dimension on token ids so the transformer input shape lines up.</div></div>
+    <div class="stage"><div class="title">merge</div><div class="desc">Compose tokenizer + transformer into one graph. IO: string -&gt; last_hidden_state.</div></div>
+    <div class="stage"><div class="title">pool</div><div class="desc">Append mean-pooling or CLS-pooling (from the <code>ModelSpec</code>) across the sequence axis.</div></div>
+    <div class="stage"><div class="title">L2 normalize</div><div class="desc">Bolt an L2 normalization node on top so downstream cosine similarity works correctly.</div></div>
+    <div class="stage"><div class="title">Squeeze</div><div class="desc">Drop the batch dim. Output is a 1-D float32 vector of the preset's declared size.</div></div>
+  </div>
+
+  <h2>DSN resolution precedence</h2>
+  <div class="dsn-list">
+    <div class="dsn-item">
+      <div class="dsn-rank">1</div>
+      <div class="dsn-source">CLI flag</div>
+      <div class="arrow">&rarr;</div>
+      <div class="dsn-example">--dsn 'user/pass@host:port/service'</div>
+    </div>
+    <div class="dsn-item">
+      <div class="dsn-rank">2</div>
+      <div class="dsn-source">env var</div>
+      <div class="arrow">&rarr;</div>
+      <div class="dsn-example">ONNX2ORACLE_DSN</div>
+    </div>
+    <div class="dsn-item">
+      <div class="dsn-rank">3</div>
+      <div class="dsn-source">toml file</div>
+      <div class="arrow">&rarr;</div>
+      <div class="dsn-example">~/.config/onnx2oracle/config.toml</div>
+    </div>
+    <div class="dsn-item">
+      <div class="dsn-rank">4</div>
+      <div class="dsn-source">--target</div>
+      <div class="arrow">&rarr;</div>
+      <div class="dsn-example">--target local (assumes the Docker setup)</div>
+    </div>
+    <div class="dsn-item">
+      <div class="dsn-rank">5</div>
+      <div class="dsn-source">prompt</div>
+      <div class="arrow">&rarr;</div>
+      <div class="dsn-example">interactive (fallback, only if nothing else matched)</div>
+    </div>
+  </div>
+
+  <footer>
+    <p>Contributor architecture doc for <a href="https://github.com/jasperan/onnx2oracle">onnx2oracle</a>. Looking for the user guide? See <a href="index.html">docs/index.html</a>. Diagram source: <code>architecture.excalidraw</code>.</p>
+  </footer>
+
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#151a21',
+      primaryColor: '#1c232d',
+      primaryBorderColor: '#58a6ff',
+      primaryTextColor: '#e6edf3',
+      lineColor: '#8b949e',
+      fontFamily: 'JetBrains Mono, monospace'
+    }
+  });
+</script>
+</body>
+</html>

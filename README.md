@@ -14,7 +14,7 @@ onnx2oracle load all-MiniLM-L6-v2 --target local
 onnx2oracle verify --target local
 ```
 
-Embeddings run entirely in-database via Oracle's `VECTOR_EMBEDDING` — no external API calls, no network round-trips, no serving layer.
+Embeddings run entirely in-database via Oracle's `VECTOR_EMBEDDING` (no external API calls, no network round-trips, no serving layer).
 
 ## How it works
 
@@ -23,6 +23,26 @@ Embeddings run entirely in-database via Oracle's `VECTOR_EMBEDDING` — no exter
 ```sql
 SELECT VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING 'hello world' AS DATA) FROM dual;
 ```
+
+## Architecture
+
+See [Architecture Diagram](docs/architecture.excalidraw) (Excalidraw, open at [excalidraw.com](https://excalidraw.com)) and [Architecture Overview](docs/architecture.html) for visual documentation of how the pieces fit together.
+
+The augmented ONNX pipeline is the interesting bit. HuggingFace ships a Python tokenizer; Oracle needs an ONNX graph it can call directly. `pipeline.py` wraps the fast tokenizer as ONNX ops via `onnxruntime-extensions`, welds it onto the transformer body, bolts mean- or CLS-pooling on top, appends L2 normalization, and emits a single graph that goes string to float32 vector. That's what gets uploaded via `DBMS_VECTOR.LOAD_ONNX_MODEL`.
+
+## Directory Structure
+
+    src/onnx2oracle/
+    ├── cli.py            # Typer commands: load, verify, presets, docker, config
+    ├── presets.py        # 6 curated ModelSpecs
+    ├── connection.py     # DSN resolution (CLI > env > toml > target > prompt)
+    ├── pipeline.py       # HF model -> augmented ONNX bytes
+    ├── loader.py         # DBMS_VECTOR.LOAD_ONNX_MODEL wrapper
+    └── verify.py         # Smoke test via VECTOR_EMBEDDING
+    docker/
+    └── docker-compose.yml  # Oracle 26ai Free (gvenzl fallback documented)
+    docs/                 # GitHub Pages site + architecture docs
+    tests/                # Unit + integration (needs --run-integration)
 
 ## Presets
 
