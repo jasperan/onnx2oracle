@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Custom models — onnx2oracle</title>
+<meta name="description" content="Load any HuggingFace sentence encoder with --from-huggingface. Worked examples for mean and CLS pooling.">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1815'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='600' fill='%23f0ebe0' text-anchor='middle'%3Eo%3C/text%3E%3C/svg%3E">
+<script src="../assets/main.js" defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="shell topbar-inner">
+    <a class="brand bare" href="../index.html"><span class="brand-mark">o</span><span>onnx2oracle</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="01-quickstart.html">Quickstart</a>
+      <a href="02-how-it-works.html">How it works</a>
+      <a href="03-models.html">Models</a>
+      <a href="../reference/cli.html">CLI</a>
+      <a href="../reference/troubleshooting.html">Troubleshooting</a>
+    </nav>
+    <div class="topbar-tools">
+      <button class="btn-ghost" data-theme-toggle aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span>Theme</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="shell doc-layout">
+
+  <aside class="doc-side" aria-label="Guide navigation">
+    <h4>The guide</h4>
+    <ol>
+      <li><a href="01-quickstart.html"><span class="n">01</span>Quickstart</a></li>
+      <li><a href="02-how-it-works.html"><span class="n">02</span>How it works</a></li>
+      <li><a href="03-models.html"><span class="n">03</span>Pick a model</a></li>
+      <li><a href="04-connect-to-cloud.html"><span class="n">04</span>ADB wallet</a></li>
+      <li><a href="05-custom-models.html" aria-current="page"><span class="n">05</span>Custom models</a></li>
+    </ol>
+    <h4 style="margin-top:22px;">Reference</h4>
+    <ol>
+      <li><a href="../reference/cli.html"><span class="n">R1</span>CLI</a></li>
+      <li><a href="../reference/troubleshooting.html"><span class="n">R2</span>Troubleshooting</a></li>
+      <li><a href="../reference/model-matrix.html"><span class="n">R3</span>Model matrix</a></li>
+    </ol>
+  </aside>
+
+  <article class="doc-body">
+    <div class="eyebrow">Guide 05</div>
+    <h1>Custom models</h1>
+    <p class="lede">The six presets cover most English and multilingual cases. When yours isn't one of them, <code>--from-huggingface</code> loads any sentence encoder — you just need to know its pooling strategy and output dimension.</p>
+
+    <h2>What you need to know about the model</h2>
+    <p>Before calling the loader, read the HuggingFace model card for four values:</p>
+    <ul>
+      <li><strong>HF repo id</strong> — e.g. <code>BAAI/bge-large-en-v1.5</code>.</li>
+      <li><strong>Pooling</strong> — <code>mean</code> (most models) or <code>cls</code> (most BGE, BERT-classification finetunes).</li>
+      <li><strong>Embedding dimension</strong> — usually in the model card sidebar; 384, 512, 768, 1024 are common.</li>
+      <li><strong>Max sequence length</strong> — 512 unless the card says otherwise.</li>
+    </ul>
+    <p>If the card is ambiguous, grep its <code>config.json</code> for <code>hidden_size</code> (= dimension) and its <code>modules.json</code> for the pooling module name.</p>
+
+    <h2>Example 1 — a larger BGE variant</h2>
+    <p><code>BAAI/bge-large-en-v1.5</code> uses CLS pooling and emits 1024-d vectors.</p>
+    <pre><code>$ onnx2oracle load --from-huggingface BAAI/bge-large-en-v1.5 \
+    --pooling cls \
+    --dims 1024 \
+    --max-length 512 \
+    --name BGE_LARGE_EN_V1_5 \
+    --normalize</code></pre>
+    <p>You'll see the same pipeline output as the presets — download, wrap tokenizer, add pooling, add L2 norm, load. The <code>--normalize</code> flag is on by default; pass <code>--no-normalize</code> only if you specifically want un-normalized output (rare).</p>
+
+    <h2>Example 2 — a mean-pooled domain model</h2>
+    <p><code>pritamdeka/S-BioBert-snli-multinli-stsb</code> — BioBERT finetuned for sentence similarity. Mean pooling, 768-d.</p>
+    <pre><code>$ onnx2oracle load --from-huggingface pritamdeka/S-BioBert-snli-multinli-stsb \
+    --pooling mean \
+    --dims 768 \
+    --name S_BIOBERT_STSB</code></pre>
+    <p>Oracle mining-model names are case-insensitive identifiers — stick to uppercase with underscores to avoid quoting headaches in SQL.</p>
+
+    <h2>Example 3 — targeting ADB</h2>
+    <p>Same <code>--dsn</code> rules as the presets. The custom flags compose cleanly:</p>
+    <pre><code>$ onnx2oracle load --from-huggingface intfloat/e5-large-v2 \
+    --pooling mean --dims 1024 --max-length 512 \
+    --name E5_LARGE_V2 \
+    --dsn 'admin/YourStrongPass@(description=...high...)'</code></pre>
+
+    <h2>Gated models</h2>
+    <p>Some HF repos are gated — the download fails unless your token has accepted the license. Set <code>HF_TOKEN</code> before calling <code>load</code>:</p>
+    <pre><code>$ export HF_TOKEN=hf_***
+$ onnx2oracle load --from-huggingface nomic-ai/nomic-embed-text-v1.5 \
+    --pooling mean --dims 768 --name NOMIC_V1_5</code></pre>
+    <p>See <a href="../reference/troubleshooting.html#hf-download-fails">#hf-download-fails</a> if downloads 401.</p>
+
+    <h2>What the flags actually do</h2>
+    <table>
+      <thead><tr><th>Flag</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">--pooling mean</td><td>Wraps the encoder output in <code>ReduceMean</code> across the sequence axis, masked by the attention mask.</td></tr>
+        <tr><td class="mono">--pooling cls</td><td>Wraps the encoder output in <code>Gather(axis=1, indices=[0])</code> — takes the CLS token's hidden state.</td></tr>
+        <tr><td class="mono">--dims N</td><td>Asserts the final output shape. If the graph's actual output shape disagrees, the loader errors before calling Oracle — cheap to catch locally.</td></tr>
+        <tr><td class="mono">--max-length N</td><td>Upper bound on tokens per input. Longer inputs get truncated. Default 512.</td></tr>
+        <tr><td class="mono">--normalize / --no-normalize</td><td>Append the L2 norm subgraph (or don't). Leave on unless you're cascading with a non-cosine distance.</td></tr>
+        <tr><td class="mono">--name NAME</td><td>The Oracle mining-model identifier. Required for custom loads — no preset to derive a default from.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>When a load fails on Oracle's side</h2>
+    <p>Custom models are the most common source of <code>ORA-20000</code>. Two causes dominate:</p>
+    <ol>
+      <li>The exported ONNX opset is newer than Oracle's runtime supports. Rebuild with <code>onnx>=1.16</code> and opset 18. The loader already does this, but if you're supplying your own ONNX bytes out of band, check.</li>
+      <li>The metadata JSON's input-tensor name doesn't match the graph. The built-in pipeline always names the input <code>pre_text</code>; make sure your custom graph does too. Full writeup at <a href="../reference/troubleshooting.html#ora-20000">#ora-20000</a>.</li>
+    </ol>
+
+    <hr>
+    <div class="row-wrap" style="justify-content:space-between;">
+      <a class="btn-ghost bare" href="04-connect-to-cloud.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M11 19l-7-7 7-7"/></svg>
+        ADB wallet flow
+      </a>
+      <a class="btn bare" href="../reference/cli.html">
+        CLI reference
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </article>
+</main>
+
+<footer class="foot">
+  <div class="shell foot-row">
+    <div><span class="chip"><span class="chip-dot"></span>v0.1</span> <span style="margin-left:14px;">MIT licensed.</span></div>
+    <div><a href="https://github.com/jasperan/onnx2oracle">GitHub</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

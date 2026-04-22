@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect to Autonomous Database — onnx2oracle</title>
+<meta name="description" content="Point the loader at Oracle ADB. Walletless mTLS is the short path; classic wallet still works.">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1815'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='600' fill='%23f0ebe0' text-anchor='middle'%3Eo%3C/text%3E%3C/svg%3E">
+<script src="../assets/main.js" defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="shell topbar-inner">
+    <a class="brand bare" href="../index.html"><span class="brand-mark">o</span><span>onnx2oracle</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="01-quickstart.html">Quickstart</a>
+      <a href="02-how-it-works.html">How it works</a>
+      <a href="03-models.html">Models</a>
+      <a href="../reference/cli.html">CLI</a>
+      <a href="../reference/troubleshooting.html">Troubleshooting</a>
+    </nav>
+    <div class="topbar-tools">
+      <button class="btn-ghost" data-theme-toggle aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span>Theme</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="shell doc-layout">
+
+  <aside class="doc-side" aria-label="Guide navigation">
+    <h4>The guide</h4>
+    <ol>
+      <li><a href="01-quickstart.html"><span class="n">01</span>Quickstart</a></li>
+      <li><a href="02-how-it-works.html"><span class="n">02</span>How it works</a></li>
+      <li><a href="03-models.html"><span class="n">03</span>Pick a model</a></li>
+      <li><a href="04-connect-to-cloud.html" aria-current="page"><span class="n">04</span>ADB wallet</a></li>
+      <li><a href="05-custom-models.html"><span class="n">05</span>Custom models</a></li>
+    </ol>
+    <h4 style="margin-top:22px;">Reference</h4>
+    <ol>
+      <li><a href="../reference/cli.html"><span class="n">R1</span>CLI</a></li>
+      <li><a href="../reference/troubleshooting.html"><span class="n">R2</span>Troubleshooting</a></li>
+      <li><a href="../reference/model-matrix.html"><span class="n">R3</span>Model matrix</a></li>
+    </ol>
+  </aside>
+
+  <article class="doc-body">
+    <div class="eyebrow">Guide 04</div>
+    <h1>Connect to Oracle ADB</h1>
+    <p class="lede">Local Docker is the shortest demo. Real work happens against Autonomous Database. There are two paths, and the walletless mTLS one is genuinely simpler.</p>
+
+    <h2>Path A — Walletless mTLS (preferred)</h2>
+    <p>ADB instances provisioned with mTLS can accept an <em>mTLS connection string</em> that embeds the wallet info directly. No ZIP to unpack, no <code>TNS_ADMIN</code> to configure. Since 2024 this is the default way to connect from Python.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div>
+          <h3>Grab the mTLS connection string</h3>
+          <p>From the OCI console: your ADB instance → <em>Database connection</em> → <em>mTLS authentication required</em> → copy the connection string. It looks like:</p>
+          <pre><code>(description= (retry_count=20)(retry_delay=3)
+  (address=(protocol=tcps)(port=1522)(host=adb.us-ashburn-1.oraclecloud.com))
+  (connect_data=(service_name=abc123_mydb_high.adb.oraclecloud.com))
+  (security=(ssl_server_dn_match=yes)))</code></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">02</div>
+        <div>
+          <h3>Call the loader with a <code>--dsn</code></h3>
+          <p>Collapse the description into one line, prefix with <code>admin/password@</code>, and pass it through. The Python driver parses it directly.</p>
+          <pre><code>$ onnx2oracle load all-MiniLM-L6-v2 \
+    --dsn 'admin/YourStrongPass@(description=...service_name=..._high...)'</code></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">03</div>
+        <div>
+          <h3>Or put it in the env</h3>
+          <p>DSN resolution walks <code>--dsn</code> → <code>ORACLE_DSN</code> → <code>~/.onnx2oracle/config.toml</code> → local. Shell-wide exports win over CI flags only if you forget the flag.</p>
+          <pre><code>$ export ORACLE_DSN='admin/YourStrongPass@(description=...)'
+$ onnx2oracle load all-MiniLM-L6-v2
+$ onnx2oracle verify</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Service levels.</strong> ADB exposes five levels (<code>_high</code>, <code>_medium</code>, <code>_low</code>, <code>_tp</code>, <code>_tpurgent</code>). For model loading and verification, any of them works. For production <code>VECTOR_EMBEDDING</code> calls at scale, <code>_tp</code> or <code>_medium</code> are the usual picks.
+    </div>
+
+    <h2>Path B — Classic wallet</h2>
+    <p>If the instance requires the downloaded wallet (older pre-mTLS provisioning, or you want SSL_SERVER_DN_MATCH verified by file):</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div>
+          <h3>Download the wallet</h3>
+          <p>Console → ADB instance → <em>Database connection</em> → <em>Download wallet</em>. Save the ZIP, pick a passphrase, remember it.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <div>
+          <h3>Unpack and point <code>TNS_ADMIN</code> at it</h3>
+          <pre><code>$ mkdir -p ~/wallets/mydb
+$ unzip wallet_mydb.zip -d ~/wallets/mydb
+$ export TNS_ADMIN=~/wallets/mydb</code></pre>
+          <p>The wallet bundles <code>tnsnames.ora</code>, <code>sqlnet.ora</code>, and the encrypted keystore. With <code>TNS_ADMIN</code> set, you can use the TNS alias directly.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <div>
+          <h3>Load against the alias</h3>
+          <pre><code>$ onnx2oracle load all-MiniLM-L6-v2 \
+    --dsn 'admin/YourStrongPass@mydb_high'</code></pre>
+          <p>Where <code>mydb_high</code> is one of the aliases in <code>tnsnames.ora</code>.</p>
+        </div>
+      </div>
+    </div>
+
+    <h2>Privileges the ADMIN user needs</h2>
+    <p>The default <code>ADMIN</code> role on ADB already has what's needed. If you load as a <em>non-admin</em> user (recommended for production), grant these first:</p>
+    <pre><code><span class="c">-- run as ADMIN</span>
+GRANT EXECUTE ON DBMS_VECTOR TO app_user;
+GRANT CREATE MINING MODEL TO app_user;
+GRANT SELECT ANY DICTIONARY TO app_user;</code></pre>
+
+    <p>The <code>SELECT ANY DICTIONARY</code> grant is what lets <code>verify</code> query <code>user_mining_models</code> to confirm the load landed.</p>
+
+    <h2>One-time checks</h2>
+    <p>From the same shell:</p>
+    <pre><code>$ onnx2oracle verify
+$ echo $?
+0</code></pre>
+    <p>If the exit code is 0 and the cosine sanity reads 1.000, you're done. Vectors are flowing through <code>VECTOR_EMBEDDING</code> on ADB.</p>
+
+    <hr>
+    <div class="row-wrap" style="justify-content:space-between;">
+      <a class="btn-ghost bare" href="03-models.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M11 19l-7-7 7-7"/></svg>
+        Pick a model
+      </a>
+      <a class="btn bare" href="05-custom-models.html">
+        Custom models
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </article>
+</main>
+
+<footer class="foot">
+  <div class="shell foot-row">
+    <div><span class="chip"><span class="chip-dot"></span>v0.1</span> <span style="margin-left:14px;">MIT licensed.</span></div>
+    <div><a href="https://github.com/jasperan/onnx2oracle">GitHub</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

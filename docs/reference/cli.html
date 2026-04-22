@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLI reference — onnx2oracle</title>
+<meta name="description" content="Every onnx2oracle command, flag, and DSN resolution rule.">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1815'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='600' fill='%23f0ebe0' text-anchor='middle'%3Eo%3C/text%3E%3C/svg%3E">
+<script src="../assets/main.js" defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="shell topbar-inner">
+    <a class="brand bare" href="../index.html"><span class="brand-mark">o</span><span>onnx2oracle</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="../guide/01-quickstart.html">Quickstart</a>
+      <a href="../guide/02-how-it-works.html">How it works</a>
+      <a href="../guide/03-models.html">Models</a>
+      <a href="cli.html" aria-current="page">CLI</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+    </nav>
+    <div class="topbar-tools">
+      <button class="btn-ghost" data-theme-toggle aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span>Theme</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="shell doc-layout">
+
+  <aside class="doc-side" aria-label="Reference navigation">
+    <h4>Reference</h4>
+    <ol>
+      <li><a href="cli.html" aria-current="page"><span class="n">R1</span>CLI</a></li>
+      <li><a href="troubleshooting.html"><span class="n">R2</span>Troubleshooting</a></li>
+      <li><a href="model-matrix.html"><span class="n">R3</span>Model matrix</a></li>
+    </ol>
+    <h4 style="margin-top:22px;">On this page</h4>
+    <ol>
+      <li><a href="#info"><span class="n">·</span>Info commands</a></li>
+      <li><a href="#load"><span class="n">·</span>load</a></li>
+      <li><a href="#verify"><span class="n">·</span>verify</a></li>
+      <li><a href="#docker"><span class="n">·</span>docker</a></li>
+      <li><a href="#config"><span class="n">·</span>config</a></li>
+      <li><a href="#dsn"><span class="n">·</span>DSN resolution</a></li>
+    </ol>
+  </aside>
+
+  <article class="doc-body">
+    <div class="eyebrow">Reference R1</div>
+    <h1>CLI reference</h1>
+    <p class="lede">Every command the Typer-based CLI exposes. Commands that touch Oracle all honour the same DSN resolution rules — described at the bottom.</p>
+
+    <h2 id="info">Info commands</h2>
+    <pre><code>onnx2oracle version
+onnx2oracle presets</code></pre>
+    <p><code>version</code> prints the package version and the ONNX opset it emits. <code>presets</code> prints the six registered models with their Oracle names, HF repos, and dimensions.</p>
+
+    <h2 id="load">load</h2>
+    <p>The primary command. Two shapes — preset or HuggingFace repo.</p>
+    <pre><code>onnx2oracle load &lt;preset&gt; [--target local | --dsn user/pw@host:port/service]
+                         [--force] [--name ORACLE_NAME] [--cache-dir PATH]
+
+onnx2oracle load --from-huggingface &lt;hf/repo&gt; --pooling {mean,cls}
+                 [--normalize/--no-normalize] [--max-length 512]
+                 --dims 384 --name ORACLE_NAME
+                 [--target local | --dsn ...]</code></pre>
+
+    <h3>Flags</h3>
+    <table>
+      <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">&lt;preset&gt;</td><td>One of the six registered names. <code>onnx2oracle presets</code> shows the list.</td></tr>
+        <tr><td class="mono">--from-huggingface</td><td>Alternative to preset. Fully-qualified HF repo (e.g. <code>BAAI/bge-large-en-v1.5</code>).</td></tr>
+        <tr><td class="mono">--target local</td><td>Use the local Docker DSN <code>system/onnx2oracle@localhost:1521/FREEPDB1</code>.</td></tr>
+        <tr><td class="mono">--dsn</td><td>Explicit connection string. See <a href="#dsn">DSN resolution</a>.</td></tr>
+        <tr><td class="mono">--force</td><td>Drop and reload if the model name already exists in <code>user_mining_models</code>.</td></tr>
+        <tr><td class="mono">--name</td><td>Override the Oracle mining-model identifier. Required for <code>--from-huggingface</code>.</td></tr>
+        <tr><td class="mono">--cache-dir</td><td>Where to cache the HuggingFace download. Defaults to <code>~/.onnx2oracle/cache</code>.</td></tr>
+        <tr><td class="mono">--pooling</td><td><code>mean</code> or <code>cls</code>. Custom loads only — presets encode this.</td></tr>
+        <tr><td class="mono">--normalize / --no-normalize</td><td>Append L2 normalization. Default on.</td></tr>
+        <tr><td class="mono">--max-length</td><td>Token truncation limit. Default 512.</td></tr>
+        <tr><td class="mono">--dims</td><td>Asserted output dimension. Custom loads only.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="verify">verify</h2>
+    <pre><code>onnx2oracle verify [--target local | --dsn ...] [--name ORACLE_NAME]</code></pre>
+    <p>Runs three checks against the named model (or the last one loaded in the session):</p>
+    <ol>
+      <li><code>VECTOR_EMBEDDING</code> returns a vector of the expected dimension.</li>
+      <li>The vector is float32.</li>
+      <li><code>cosine(v, v) = 1.000</code> on a deterministic string.</li>
+    </ol>
+    <p>Exit code 0 on success, non-zero otherwise.</p>
+
+    <h2 id="docker">docker</h2>
+    <pre><code>onnx2oracle docker up [--wait]
+onnx2oracle docker down
+onnx2oracle docker logs [-f]</code></pre>
+    <p>Thin wrapper around <code>docker compose</code> pointed at the bundled compose file. <code>up --wait</code> polls the container's healthcheck until it reports healthy or 10 minutes elapses — see <a href="troubleshooting.html#docker-timeout">#docker-timeout</a>.</p>
+    <p><code>logs -f</code> tails Oracle's alert log. Useful when the container comes up but something inside the database doesn't.</p>
+
+    <h2 id="config">config</h2>
+    <pre><code>onnx2oracle config show
+onnx2oracle config set key=value</code></pre>
+    <p><code>show</code> dumps the effective TOML at <code>~/.onnx2oracle/config.toml</code>. <code>set</code> writes a single key. Typical keys:</p>
+    <ul>
+      <li><code>default_dsn</code> — persistent DSN, wins over <code>--target local</code> but loses to <code>--dsn</code> and <code>ORACLE_DSN</code>.</li>
+      <li><code>cache_dir</code> — override <code>~/.onnx2oracle/cache</code>.</li>
+      <li><code>hf_token</code> — persisted HuggingFace token (prefer <code>HF_TOKEN</code> env if you don't want it on disk).</li>
+    </ul>
+
+    <h2 id="dsn">DSN resolution</h2>
+    <p>Every Oracle-bound command resolves a DSN by this order, first match wins:</p>
+    <table>
+      <thead><tr><th>#</th><th>Source</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">1</td><td><code>--dsn</code> flag</td><td class="mono">--dsn admin/pw@...</td></tr>
+        <tr><td class="mono">2</td><td><code>ORACLE_DSN</code> env var</td><td class="mono">export ORACLE_DSN=...</td></tr>
+        <tr><td class="mono">3</td><td><code>~/.onnx2oracle/config.toml</code> <code>default_dsn</code></td><td class="mono">config set default_dsn=...</td></tr>
+        <tr><td class="mono">4</td><td><code>--target local</code></td><td class="mono">system/onnx2oracle@localhost:1521/FREEPDB1</td></tr>
+        <tr><td class="mono">5</td><td>Interactive prompt</td><td class="mono">CLI asks stdin</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>One exception.</strong> <code>docker up/down/logs</code> don't need a DSN — they talk to Docker directly. Every other command walks the table above.
+    </div>
+
+    <hr>
+    <div class="row-wrap" style="justify-content:space-between;">
+      <a class="btn-ghost bare" href="../guide/05-custom-models.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M11 19l-7-7 7-7"/></svg>
+        Custom models
+      </a>
+      <a class="btn bare" href="troubleshooting.html">
+        Troubleshooting
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </article>
+</main>
+
+<footer class="foot">
+  <div class="shell foot-row">
+    <div><span class="chip"><span class="chip-dot"></span>v0.1</span> <span style="margin-left:14px;">MIT licensed.</span></div>
+    <div><a href="https://github.com/jasperan/onnx2oracle">GitHub</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

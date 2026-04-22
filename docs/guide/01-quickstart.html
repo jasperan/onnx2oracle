@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quickstart — onnx2oracle</title>
+<meta name="description" content="Docker up, load, verify — your first onnx2oracle run in four minutes.">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1815'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='600' fill='%23f0ebe0' text-anchor='middle'%3Eo%3C/text%3E%3C/svg%3E">
+<script src="../assets/main.js" defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="shell topbar-inner">
+    <a class="brand bare" href="../index.html">
+      <span class="brand-mark">o</span>
+      <span>onnx2oracle</span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="01-quickstart.html" aria-current="page">Quickstart</a>
+      <a href="02-how-it-works.html">How it works</a>
+      <a href="03-models.html">Models</a>
+      <a href="../reference/cli.html">CLI</a>
+      <a href="../reference/troubleshooting.html">Troubleshooting</a>
+    </nav>
+    <div class="topbar-tools">
+      <button class="btn-ghost" data-theme-toggle aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span>Theme</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="shell doc-layout">
+
+  <aside class="doc-side" aria-label="Guide navigation">
+    <h4>The guide</h4>
+    <ol>
+      <li><a href="01-quickstart.html" aria-current="page"><span class="n">01</span>Quickstart</a></li>
+      <li><a href="02-how-it-works.html"><span class="n">02</span>How it works</a></li>
+      <li><a href="03-models.html"><span class="n">03</span>Pick a model</a></li>
+      <li><a href="04-connect-to-cloud.html"><span class="n">04</span>ADB wallet</a></li>
+      <li><a href="05-custom-models.html"><span class="n">05</span>Custom models</a></li>
+    </ol>
+    <h4 style="margin-top:22px;">Reference</h4>
+    <ol>
+      <li><a href="../reference/cli.html"><span class="n">R1</span>CLI</a></li>
+      <li><a href="../reference/troubleshooting.html"><span class="n">R2</span>Troubleshooting</a></li>
+      <li><a href="../reference/model-matrix.html"><span class="n">R3</span>Model matrix</a></li>
+    </ol>
+  </aside>
+
+  <article class="doc-body">
+    <div class="eyebrow">Guide 01</div>
+    <h1>Quickstart</h1>
+    <p class="lede">Docker up, load, verify. Four commands, three prompts, one 384-d vector on the other end.</p>
+
+    <div class="callout">
+      <strong>Prerequisites.</strong> Docker with ~6 GB of free RAM, Python 3.11+, and <code>pip install onnx2oracle</code>.
+      You do not need Oracle installed locally — the compose file pulls Oracle 26ai Free.
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div>
+          <h3>Start Oracle 26ai Free</h3>
+          <p>First run downloads the image (~3 GB) and initializes the database. Expect three to five minutes. The <code>--wait</code> flag polls <code>healthcheck</code> so the command only returns when the listener is up.</p>
+          <pre><code>$ onnx2oracle docker up --wait
+  pulling container-registry.oracle.com/database/free:latest
+  starting onnx2oracle-oracle ...
+  waiting for healthcheck ....... ready</code></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">02</div>
+        <div>
+          <h3>Load the default model</h3>
+          <p>With no <code>--target</code> or <code>--dsn</code>, the loader uses the local compose DSN:
+            <code>system/onnx2oracle@localhost:1521/FREEPDB1</code>. The augmented ONNX is built in memory and
+            streamed to Oracle as a BLOB — nothing touches the filesystem of the database container.</p>
+          <pre><code>$ onnx2oracle load all-MiniLM-L6-v2
+  downloading sentence-transformers/all-MiniLM-L6-v2 (90 MB)
+  wrapping tokenizer (onnxruntime-extensions)
+  adding mean pool + L2 norm
+  calling DBMS_VECTOR.LOAD_ONNX_MODEL ... ok
+  model registered as ALL_MINILM_L6_V2</code></pre>
+          <p>The first load caches the HuggingFace download under <code>~/.onnx2oracle/cache/</code>. Subsequent runs skip the network.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">03</div>
+        <div>
+          <h3>Verify</h3>
+          <p><code>verify</code> embeds a canned string twice, asserts the output is 384-d float32, and confirms
+            <code>cosine(v, v) = 1.0</code>. If that fails, the issue is in the graph, not your app.</p>
+          <pre><code>$ onnx2oracle verify
+  model: ALL_MINILM_L6_V2
+  VECTOR_EMBEDDING(...) returned 384-d ... ok
+  cosine(self, self) = 1.000000 ... ok
+  cosine(cat, dog)   = 0.672 ... sensible</code></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">04</div>
+        <div>
+          <h3>Embed your own rows</h3>
+          <p>Straight SQL from here on. The model name is the one printed above.</p>
+          <pre><code>SELECT VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING 'hello world' AS DATA) AS v
+FROM dual;</code></pre>
+          <p>Store the result in a <code>VECTOR(384, FLOAT32)</code> column, build an <code>IVF_FLAT</code> or <code>HNSW</code> index, and you're doing retrieval inside the DB.</p>
+        </div>
+      </div>
+    </div>
+
+    <h2>Tearing it down</h2>
+    <p><code>onnx2oracle docker down</code> stops and removes the container. Volumes persist unless you pass <code>--volumes</code>.</p>
+    <pre><code>$ onnx2oracle docker down
+  stopping onnx2oracle-oracle ... removed</code></pre>
+
+    <h2>If something went wrong</h2>
+    <ul>
+      <li>Healthcheck never returned — see <a href="../reference/troubleshooting.html#docker-timeout">#docker-timeout</a>.</li>
+      <li><code>ORA-20000: LOAD_ONNX_MODEL failed</code> — see <a href="../reference/troubleshooting.html#ora-20000">#ora-20000</a>.</li>
+      <li><code>ORA-01031: insufficient privileges</code> — see <a href="../reference/troubleshooting.html#ora-01031">#ora-01031</a>.</li>
+    </ul>
+
+    <hr>
+
+    <div class="row-wrap" style="justify-content:space-between;">
+      <a class="btn-ghost bare" href="../index.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M11 19l-7-7 7-7"/></svg>
+        Home
+      </a>
+      <a class="btn bare" href="02-how-it-works.html">
+        How it works
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </article>
+</main>
+
+<footer class="foot">
+  <div class="shell foot-row">
+    <div><span class="chip"><span class="chip-dot"></span>v0.1</span> <span style="margin-left:14px;">MIT licensed.</span></div>
+    <div><a href="https://github.com/jasperan/onnx2oracle">GitHub</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

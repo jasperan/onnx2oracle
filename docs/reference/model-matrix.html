@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model matrix — onnx2oracle</title>
+<meta name="description" content="All six presets, sortable. HF repo, dimensions, FP32 size, pooling, Oracle mining-model name.">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1815'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='600' fill='%23f0ebe0' text-anchor='middle'%3Eo%3C/text%3E%3C/svg%3E">
+<script src="../assets/main.js" defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="shell topbar-inner">
+    <a class="brand bare" href="../index.html"><span class="brand-mark">o</span><span>onnx2oracle</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="../guide/01-quickstart.html">Quickstart</a>
+      <a href="../guide/02-how-it-works.html">How it works</a>
+      <a href="../guide/03-models.html">Models</a>
+      <a href="cli.html">CLI</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+    </nav>
+    <div class="topbar-tools">
+      <button class="btn-ghost" data-theme-toggle aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span>Theme</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="shell doc-layout">
+
+  <aside class="doc-side" aria-label="Reference navigation">
+    <h4>Reference</h4>
+    <ol>
+      <li><a href="cli.html"><span class="n">R1</span>CLI</a></li>
+      <li><a href="troubleshooting.html"><span class="n">R2</span>Troubleshooting</a></li>
+      <li><a href="model-matrix.html" aria-current="page"><span class="n">R3</span>Model matrix</a></li>
+    </ol>
+  </aside>
+
+  <article class="doc-body">
+    <div class="eyebrow">Reference R3</div>
+    <h1>Model matrix</h1>
+    <p class="lede">The full set of registered presets. Click any column header to sort — useful when you're picking by size, dimension, or pooling strategy.</p>
+
+    <table data-sortable>
+      <thead>
+        <tr>
+          <th>Preset</th>
+          <th>HuggingFace repo</th>
+          <th>Dimensions</th>
+          <th>Size (FP32)</th>
+          <th>Pooling</th>
+          <th>Oracle name</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">all-MiniLM-L6-v2</td>
+          <td class="mono">sentence-transformers/all-MiniLM-L6-v2</td>
+          <td class="mono" data-sort-value="384">384</td>
+          <td class="mono" data-sort-value="90">~90 MB</td>
+          <td class="mono">mean</td>
+          <td class="mono">ALL_MINILM_L6_V2</td>
+        </tr>
+        <tr>
+          <td class="mono">all-MiniLM-L12-v2</td>
+          <td class="mono">sentence-transformers/all-MiniLM-L12-v2</td>
+          <td class="mono" data-sort-value="384">384</td>
+          <td class="mono" data-sort-value="130">~130 MB</td>
+          <td class="mono">mean</td>
+          <td class="mono">ALL_MINILM_L12_V2</td>
+        </tr>
+        <tr>
+          <td class="mono">all-mpnet-base-v2</td>
+          <td class="mono">sentence-transformers/all-mpnet-base-v2</td>
+          <td class="mono" data-sort-value="768">768</td>
+          <td class="mono" data-sort-value="420">~420 MB</td>
+          <td class="mono">mean</td>
+          <td class="mono">ALL_MPNET_BASE_V2</td>
+        </tr>
+        <tr>
+          <td class="mono">multilingual-e5-small</td>
+          <td class="mono">intfloat/multilingual-e5-small</td>
+          <td class="mono" data-sort-value="384">384</td>
+          <td class="mono" data-sort-value="470">~470 MB</td>
+          <td class="mono">mean</td>
+          <td class="mono">MULTILINGUAL_E5_SMALL</td>
+        </tr>
+        <tr>
+          <td class="mono">bge-small-en-v1.5</td>
+          <td class="mono">BAAI/bge-small-en-v1.5</td>
+          <td class="mono" data-sort-value="384">384</td>
+          <td class="mono" data-sort-value="130">~130 MB</td>
+          <td class="mono">cls</td>
+          <td class="mono">BGE_SMALL_EN_V1_5</td>
+        </tr>
+        <tr>
+          <td class="mono">nomic-embed-text-v1</td>
+          <td class="mono">nomic-ai/nomic-embed-text-v1</td>
+          <td class="mono" data-sort-value="768">768</td>
+          <td class="mono" data-sort-value="540">~540 MB</td>
+          <td class="mono">mean</td>
+          <td class="mono">NOMIC_EMBED_TEXT_V1</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>A note on sizes</h2>
+    <p>The FP32 size is the on-disk footprint of the augmented ONNX — encoder plus tokenizer ops plus pooling plus L2 norm. The encoder alone is about 85% of that. These are the models as downloaded, before any Oracle-side compression or tablespace overhead.</p>
+
+    <h2>Dimensions and storage</h2>
+    <p>The output dimension drives disk usage for the vector column:</p>
+    <ul>
+      <li>384-d · FP32 ≈ <strong>1.5 KB</strong> per row.</li>
+      <li>768-d · FP32 ≈ <strong>3.0 KB</strong> per row.</li>
+    </ul>
+    <p>Oracle's HNSW index doubles that rough figure once built. Cosine distance and dot product rank identically on L2-normalized vectors — all six presets normalize, so use whichever <code>VECTOR_DISTANCE</code> metric reads cleaner in your SQL.</p>
+
+    <hr>
+    <div class="row-wrap" style="justify-content:space-between;">
+      <a class="btn-ghost bare" href="troubleshooting.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M11 19l-7-7 7-7"/></svg>
+        Troubleshooting
+      </a>
+      <a class="btn bare" href="../index.html">
+        Home
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </article>
+</main>
+
+<footer class="foot">
+  <div class="shell foot-row">
+    <div><span class="chip"><span class="chip-dot"></span>v0.1</span> <span style="margin-left:14px;">MIT licensed.</span></div>
+    <div><a href="https://github.com/jasperan/onnx2oracle">GitHub</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

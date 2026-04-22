@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>onnx2oracle — embeddings that live inside your database</title>
+<meta name="description" content="Load HuggingFace embedding models into Oracle Database 23ai/26ai as native ONNX mining models. One command. No external services.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1815'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='600' fill='%23f0ebe0' text-anchor='middle'%3Eo%3C/text%3E%3C/svg%3E">
+<script src="assets/main.js" defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="shell topbar-inner">
+    <a class="brand bare" href="index.html">
+      <span class="brand-mark">o</span>
+      <span>onnx2oracle</span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="guide/01-quickstart.html">Quickstart</a>
+      <a href="guide/02-how-it-works.html">How it works</a>
+      <a href="guide/03-models.html">Models</a>
+      <a href="reference/cli.html">CLI</a>
+      <a href="reference/troubleshooting.html">Troubleshooting</a>
+    </nav>
+    <div class="topbar-tools">
+      <button class="btn-ghost" data-theme-toggle aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>
+        </svg>
+        <span>Theme</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section class="hero shell" aria-labelledby="hero-h">
+  <div>
+    <div class="eyebrow">v0.1 — Oracle 23ai &amp; 26ai</div>
+    <h1 id="hero-h">Embeddings that live inside your database.</h1>
+    <p class="lede">
+      <code>onnx2oracle</code> packages any HuggingFace sentence-embedding model as an augmented ONNX graph
+      and loads it directly into Oracle via <code>DBMS_VECTOR.LOAD_ONNX_MODEL</code>. No sidecar, no queue, no network hop.
+    </p>
+    <div class="cta-row">
+      <a class="btn bare" href="guide/01-quickstart.html">
+        Read the quickstart
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+      <a class="btn secondary bare" href="https://github.com/jasperan/onnx2oracle">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.6.5.5 5.6.5 12c0 5.1 3.3 9.4 7.8 10.9.6.1.8-.2.8-.6v-2.2c-3.2.7-3.8-1.4-3.8-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.8-1.6-2.5-.3-5.2-1.3-5.2-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0C18 4 19 4.3 19 4.3c.6 1.6.2 2.8.1 3.1.7.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.2 5.7.4.3.8 1 .8 2v3c0 .3.2.7.8.6A11.5 11.5 0 0 0 23.5 12C23.5 5.6 18.4.5 12 .5Z"/></svg>
+        Source on GitHub
+      </a>
+    </div>
+    <div class="hero-meta">
+      <span><strong>6</strong> preset models</span>
+      <span><strong>384 / 768</strong> dim vectors</span>
+      <span><strong>BLOB</strong>-direct — no filesystem staging</span>
+    </div>
+  </div>
+
+  <aside aria-label="Three-command demo">
+    <div class="terminal" role="img" aria-label="Terminal showing docker up, load, verify commands">
+      <span class="terminal-dots"><span></span><span></span><span></span></span>
+      <span class="terminal-title">~/projects — zsh</span>
+      <div class="terminal-body">
+        <span class="term-line t1"><span class="term-prompt">$ </span><span class="term-cmd">onnx2oracle docker up --wait</span></span>
+        <span class="term-line t2"><span class="term-out">&nbsp;&nbsp;Oracle 26ai Free ready on localhost:1521 &nbsp;</span><span class="term-ok">ok</span></span>
+        <span class="term-line t3"><span class="term-prompt">$ </span><span class="term-cmd">onnx2oracle load all-MiniLM-L6-v2</span></span>
+        <span class="term-line t4"><span class="term-out">&nbsp;&nbsp;Downloaded (90 MB) · augmented · loaded as ALL_MINILM_L6_V2 &nbsp;</span><span class="term-ok">ok</span></span>
+        <span class="term-line t5"><span class="term-prompt">$ </span><span class="term-cmd">onnx2oracle verify</span></span>
+        <span class="term-line t6"><span class="term-out">&nbsp;&nbsp;VECTOR_EMBEDDING returned 384-d · cosine(self,self)=1.000 &nbsp;</span><span class="term-ok">ok</span><span class="term-caret"></span></span>
+      </div>
+    </div>
+  </aside>
+</section>
+
+<section class="shell" aria-labelledby="reasons-h">
+  <div class="reasons">
+    <div>
+      <div class="eyebrow">Why</div>
+      <h2 id="reasons-h">In-database embeddings, for one reason at a time.</h2>
+      <p>
+        Most vector pipelines bolt an embedding microservice in front of the database. That adds a second system
+        to deploy, secure, patch, and observe. Oracle 23ai and 26ai can run the model itself — if you can get it in.
+      </p>
+    </div>
+    <div class="reasons-list" role="list">
+      <article class="reason" role="listitem">
+        <div class="reason-idx">01</div>
+        <div>
+          <h3>No sidecar service</h3>
+          <p>The model runs inside the DB process. <code>VECTOR_EMBEDDING(MODEL USING :text AS DATA)</code> is a function call — no HTTP, no queue, no fanout.</p>
+        </div>
+      </article>
+      <article class="reason" role="listitem">
+        <div class="reason-idx">02</div>
+        <div>
+          <h3>Data never leaves the tablespace</h3>
+          <p>Compliance teams like this. Your document column gets embedded without a byte crossing a network boundary.</p>
+        </div>
+      </article>
+      <article class="reason" role="listitem">
+        <div class="reason-idx">03</div>
+        <div>
+          <h3>Transactional consistency</h3>
+          <p>Insert a row, embed it, index it — all inside the same transaction. No dual-writes, no eventual sync drift.</p>
+        </div>
+      </article>
+      <article class="reason" role="listitem">
+        <div class="reason-idx">04</div>
+        <div>
+          <h3>One binary, six models, zero YAML</h3>
+          <p><code>onnx2oracle presets</code> shows the shelf. <code>load &lt;name&gt;</code> does the rest, including tokenizer wrapping and L2 normalization.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="shell" aria-labelledby="presets-h">
+  <div class="eyebrow">Presets</div>
+  <h2 id="presets-h">Six vetted models. Pick by dimension, size, and language.</h2>
+  <p style="max-width:60ch;margin-bottom:28px;">Each preset maps a HuggingFace repo to an Oracle mining-model name. Dimensions and pooling strategies match the model card — not a rewrite.</p>
+
+  <div class="preset-grid">
+    <article class="preset">
+      <div class="preset-head"><span class="preset-name">all-MiniLM-L6-v2</span><span class="preset-dim">384-d</span></div>
+      <p class="preset-desc">The default. Small, fast, good enough for English-only semantic search up to a few million rows.</p>
+      <div class="preset-meta"><span>~90 MB</span><span>mean pool</span><span>ALL_MINILM_L6_V2</span></div>
+    </article>
+    <article class="preset">
+      <div class="preset-head"><span class="preset-name">all-MiniLM-L12-v2</span><span class="preset-dim">384-d</span></div>
+      <p class="preset-desc">Same geometry as L6, deeper transformer. Better recall on longer documents; ~30% slower.</p>
+      <div class="preset-meta"><span>~130 MB</span><span>mean pool</span><span>ALL_MINILM_L12_V2</span></div>
+    </article>
+    <article class="preset">
+      <div class="preset-head"><span class="preset-name">all-mpnet-base-v2</span><span class="preset-dim">768-d</span></div>
+      <p class="preset-desc">The quality pick for English. Double the vector width, heavier index. Worth it when MRR matters.</p>
+      <div class="preset-meta"><span>~420 MB</span><span>mean pool</span><span>ALL_MPNET_BASE_V2</span></div>
+    </article>
+    <article class="preset">
+      <div class="preset-head"><span class="preset-name">multilingual-e5-small</span><span class="preset-dim">384-d</span></div>
+      <p class="preset-desc">100+ languages in one model. Prepend <code>query:</code> or <code>passage:</code> at call time — the graph doesn't do it for you.</p>
+      <div class="preset-meta"><span>~470 MB</span><span>mean pool</span><span>MULTILINGUAL_E5_SMALL</span></div>
+    </article>
+    <article class="preset">
+      <div class="preset-head"><span class="preset-name">bge-small-en-v1.5</span><span class="preset-dim">384-d</span></div>
+      <p class="preset-desc">Strong on BEIR benchmarks. Uses CLS pooling, not mean — the loader handles the difference.</p>
+      <div class="preset-meta"><span>~130 MB</span><span>cls pool</span><span>BGE_SMALL_EN_V1_5</span></div>
+    </article>
+    <article class="preset">
+      <div class="preset-head"><span class="preset-name">nomic-embed-text-v1</span><span class="preset-dim">768-d</span></div>
+      <p class="preset-desc">Long-context (8192 tokens) with Matryoshka-friendly output. Biggest of the six — plan the disk.</p>
+      <div class="preset-meta"><span>~540 MB</span><span>mean pool</span><span>NOMIC_EMBED_TEXT_V1</span></div>
+    </article>
+  </div>
+
+  <div style="margin-top:32px;">
+    <a class="btn secondary bare" href="reference/model-matrix.html">
+      Full model matrix
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+    </a>
+  </div>
+</section>
+
+<section class="shell" aria-labelledby="guide-h">
+  <div class="eyebrow">The guide</div>
+  <h2 id="guide-h">Five short pages, in order.</h2>
+  <p style="margin-bottom:28px;">Each page assumes the previous one worked. If something breaks mid-way, the troubleshooting reference maps ORA-codes to fixes.</p>
+  <div class="guide-cards">
+    <a class="guide-card bare" href="guide/01-quickstart.html">
+      <span class="num">01</span>
+      <h3>Quickstart</h3>
+      <p>Docker up, load the default model, verify the round trip in about four minutes.</p>
+    </a>
+    <a class="guide-card bare" href="guide/02-how-it-works.html">
+      <span class="num">02</span>
+      <h3>How it works</h3>
+      <p>The augmented ONNX pipeline — tokenizer, pool, L2-norm — explained with a diagram.</p>
+    </a>
+    <a class="guide-card bare" href="guide/03-models.html">
+      <span class="num">03</span>
+      <h3>Pick a model</h3>
+      <p>Decision tree across the six presets: English vs. multilingual, 384 vs. 768, speed vs. recall.</p>
+    </a>
+    <a class="guide-card bare" href="guide/04-connect-to-cloud.html">
+      <span class="num">04</span>
+      <h3>Oracle ADB wallet flow</h3>
+      <p>Point the loader at Autonomous Database. Walletless mTLS is shortest; classic wallet still works.</p>
+    </a>
+    <a class="guide-card bare" href="guide/05-custom-models.html">
+      <span class="num">05</span>
+      <h3>Custom models</h3>
+      <p>The <code>--from-huggingface</code> escape hatch with worked examples, including CLS-pooled models.</p>
+    </a>
+    <a class="guide-card bare" href="reference/cli.html">
+      <span class="num">R1</span>
+      <h3>CLI reference</h3>
+      <p>Every flag, every subcommand, including DSN resolution precedence.</p>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="shell foot-row">
+    <div>
+      <span class="chip"><span class="chip-dot"></span>v0.1</span>
+      <span style="margin-left:14px;">MIT licensed. Apache 2.0 dependencies.</span>
+    </div>
+    <div>
+      <a href="https://github.com/jasperan/onnx2oracle">GitHub</a>
+      &nbsp;·&nbsp;
+      <a href="reference/cli.html">CLI</a>
+      &nbsp;·&nbsp;
+      <a href="reference/troubleshooting.html">Troubleshooting</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How it works — onnx2oracle</title>
+<meta name="description" content="Inside the augmented ONNX pipeline: tokenizer, pooling, L2 normalization — all in one graph.">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1815'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='600' fill='%23f0ebe0' text-anchor='middle'%3Eo%3C/text%3E%3C/svg%3E">
+<script src="../assets/main.js" defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="shell topbar-inner">
+    <a class="brand bare" href="../index.html"><span class="brand-mark">o</span><span>onnx2oracle</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="01-quickstart.html">Quickstart</a>
+      <a href="02-how-it-works.html" aria-current="page">How it works</a>
+      <a href="03-models.html">Models</a>
+      <a href="../reference/cli.html">CLI</a>
+      <a href="../reference/troubleshooting.html">Troubleshooting</a>
+    </nav>
+    <div class="topbar-tools">
+      <button class="btn-ghost" data-theme-toggle aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span>Theme</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="shell doc-layout">
+
+  <aside class="doc-side" aria-label="Guide navigation">
+    <h4>The guide</h4>
+    <ol>
+      <li><a href="01-quickstart.html"><span class="n">01</span>Quickstart</a></li>
+      <li><a href="02-how-it-works.html" aria-current="page"><span class="n">02</span>How it works</a></li>
+      <li><a href="03-models.html"><span class="n">03</span>Pick a model</a></li>
+      <li><a href="04-connect-to-cloud.html"><span class="n">04</span>ADB wallet</a></li>
+      <li><a href="05-custom-models.html"><span class="n">05</span>Custom models</a></li>
+    </ol>
+    <h4 style="margin-top:22px;">Reference</h4>
+    <ol>
+      <li><a href="../reference/cli.html"><span class="n">R1</span>CLI</a></li>
+      <li><a href="../reference/troubleshooting.html"><span class="n">R2</span>Troubleshooting</a></li>
+      <li><a href="../reference/model-matrix.html"><span class="n">R3</span>Model matrix</a></li>
+    </ol>
+  </aside>
+
+  <article class="doc-body">
+    <div class="eyebrow">Guide 02</div>
+    <h1>How it works</h1>
+    <p class="lede">The HuggingFace model card describes a pipeline — tokenize, run the encoder, pool, normalize.
+      Oracle's ONNX runtime only sees a single graph. So we stitch the pipeline into one graph before handing it over.</p>
+
+    <h2>The augmented graph</h2>
+    <p>Every preset produces an ONNX file with exactly one string input and one float32 vector output.
+      The string is the raw document; the vector is ready to go into a <code>VECTOR(dims, FLOAT32)</code> column with cosine distance.</p>
+
+    <div class="diagram" aria-label="Pipeline diagram: string input flows through tokenizer, transformer, pooling, L2 normalization, to a dim-length vector">
+      <svg viewBox="0 0 880 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+          </marker>
+          <style>
+            .box { fill: var(--bg); stroke: var(--ink); stroke-width: 1.2; }
+            .accent { fill: var(--accent); }
+            .io { fill: var(--bg-sunk); stroke: var(--ink-muted); stroke-width: 1.2; stroke-dasharray: 3 3; }
+            .lbl { fill: var(--ink); font: 520 13px/1 ui-sans-serif, system-ui, sans-serif; }
+            .lbl-sm { fill: var(--ink-faint); font: 500 10.5px/1 ui-monospace, monospace; letter-spacing: 0.06em; }
+            .axis { stroke: var(--ink-muted); stroke-width: 1; }
+          </style>
+        </defs>
+
+        <g color="currentColor">
+          <!-- input -->
+          <rect class="io" x="12" y="82" width="118" height="56" rx="10"/>
+          <text class="lbl-sm" x="71" y="102" text-anchor="middle">STRING INPUT</text>
+          <text class="lbl" x="71" y="124" text-anchor="middle">pre_text</text>
+
+          <line class="axis" x1="130" y1="110" x2="172" y2="110" marker-end="url(#ar)"/>
+
+          <!-- tokenizer -->
+          <rect class="box" x="172" y="70" width="130" height="80" rx="10"/>
+          <text class="lbl-sm" x="237" y="94" text-anchor="middle">STAGE 1</text>
+          <text class="lbl" x="237" y="115" text-anchor="middle">Tokenizer</text>
+          <text class="lbl-sm" x="237" y="135" text-anchor="middle">ort-extensions</text>
+
+          <line class="axis" x1="302" y1="110" x2="344" y2="110" marker-end="url(#ar)"/>
+
+          <!-- transformer -->
+          <rect class="box" x="344" y="70" width="130" height="80" rx="10"/>
+          <text class="lbl-sm" x="409" y="94" text-anchor="middle">STAGE 2</text>
+          <text class="lbl" x="409" y="115" text-anchor="middle">Transformer</text>
+          <text class="lbl-sm" x="409" y="135" text-anchor="middle">HF encoder</text>
+
+          <line class="axis" x1="474" y1="110" x2="516" y2="110" marker-end="url(#ar)"/>
+
+          <!-- pool -->
+          <rect class="box" x="516" y="70" width="130" height="80" rx="10"/>
+          <text class="lbl-sm" x="581" y="94" text-anchor="middle">STAGE 3</text>
+          <text class="lbl" x="581" y="115" text-anchor="middle">Mean / CLS pool</text>
+          <text class="lbl-sm" x="581" y="135" text-anchor="middle">ReduceMean · Gather</text>
+
+          <line class="axis" x1="646" y1="110" x2="688" y2="110" marker-end="url(#ar)"/>
+
+          <!-- l2 -->
+          <rect class="box" x="688" y="70" width="120" height="80" rx="10"/>
+          <text class="lbl-sm" x="748" y="94" text-anchor="middle">STAGE 4</text>
+          <text class="lbl" x="748" y="115" text-anchor="middle">L2 normalize</text>
+          <text class="lbl-sm" x="748" y="135" text-anchor="middle">Pow·Sum·Sqrt·Div</text>
+
+          <line class="axis" x1="808" y1="110" x2="848" y2="110" marker-end="url(#ar)"/>
+
+          <!-- output -->
+          <rect class="io" x="744" y="170" width="120" height="40" rx="8"/>
+          <text class="lbl-sm" x="804" y="188" text-anchor="middle">FLOAT32 OUT</text>
+          <text class="lbl" x="804" y="204" text-anchor="middle">embedding[dims]</text>
+          <line class="axis" x1="805" y1="150" x2="805" y2="170" marker-end="url(#ar)"/>
+
+          <!-- top bracket label -->
+          <line class="axis" x1="172" y1="40" x2="808" y2="40"/>
+          <line class="axis" x1="172" y1="40" x2="172" y2="52"/>
+          <line class="axis" x1="808" y1="40" x2="808" y2="52"/>
+          <text class="lbl-sm accent" x="490" y="28" text-anchor="middle" fill="currentColor">SINGLE ONNX GRAPH</text>
+        </g>
+      </svg>
+      <div class="diagram-caption">One input (<code>pre_text</code>), one output (<code>embedding</code>), four internal stages fused into a single ONNX graph.</div>
+    </div>
+
+    <h2>Stage by stage</h2>
+
+    <h3>01 · Tokenizer as ONNX ops</h3>
+    <p>Normally the HuggingFace tokenizer is a Python object. We wrap it with <code>onnxruntime-extensions</code> so the tokenization step becomes real ONNX operators inside the graph. That means Oracle's runtime does the string → token-id conversion — no Python interpreter needed at inference time.</p>
+
+    <h3>02 · The transformer encoder</h3>
+    <p>This is the unmodified encoder from the HF repo. We export it with <code>onnx>=1.16</code> at opset 18, which Oracle's 23ai/26ai ONNX runtime can ingest. Attention, layer norms, residuals — nothing special, just the encoder a sentence-transformer ships with.</p>
+
+    <h3>03 · Pooling</h3>
+    <p>Two shapes show up in practice:</p>
+    <ul>
+      <li><strong>Mean pooling</strong> — <code>ReduceMean</code> across the sequence axis, respecting the attention mask. Used by all-MiniLM, all-mpnet, e5, and nomic.</li>
+      <li><strong>CLS pooling</strong> — <code>Gather(axis=1, indices=[0])</code> to grab the first token's hidden state. Used by BGE.</li>
+    </ul>
+    <p>The preset registry encodes the correct choice per model. If you're loading via <code>--from-huggingface</code>, you pass <code>--pooling mean</code> or <code>--pooling cls</code> yourself.</p>
+
+    <h3>04 · L2 normalization</h3>
+    <p>Assemble it from primitives Oracle's runtime already supports:</p>
+    <pre><code><span class="c"># conceptual; emitted as ONNX ops</span>
+norm = Max(Sqrt(ReduceSum(Pow(x, 2), axis=-1)), eps=1e-12)
+out  = Div(x, norm)</code></pre>
+    <p>That <code>Max(..., eps)</code> is the one opinionated detail — it prevents divide-by-zero on empty or whitespace-only input.</p>
+
+    <h2>How Oracle ingests it</h2>
+    <p>Three facts worth knowing:</p>
+
+    <div class="callout">
+      <strong>Oracle accepts ONNX bytes directly as a BLOB.</strong>
+      <code>DBMS_VECTOR.LOAD_ONNX_MODEL</code> has an overload that takes the model as a raw <code>BLOB</code> argument, so we never write the augmented graph to disk.
+      The loader builds the bytes in memory, opens a connection, and streams them straight in.
+    </div>
+
+    <p>The metadata JSON that accompanies the model tells Oracle the input tensor name (<code>pre_text</code>) and output shape (<code>[dims]</code>, name <code>embedding</code>). If those names don't line up with the graph's actual IO, the load fails — see <a href="../reference/troubleshooting.html#ora-20000">#ora-20000</a>.</p>
+
+    <p>Once loaded, the model name is what you reference in SQL:</p>
+    <pre><code>SELECT VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING :doc AS DATA)
+FROM my_table;</code></pre>
+
+    <p>Oracle invokes the graph row by row. For bulk loads, batch the <code>:doc</code> bind in your application code — the graph is single-row, but the runtime is happy to be called often.</p>
+
+    <h2>What this means for you</h2>
+    <ul>
+      <li>No separate tokenizer deployment. The tokenizer lives in the graph.</li>
+      <li>No Python on the DB host. Oracle's ONNX runtime handles the whole pipeline.</li>
+      <li>Upgrading a model is a re-<code>load</code>. The old blob gets dropped and replaced atomically.</li>
+      <li>Vectors are already L2-normalized, so cosine distance and dot product give the same ranking.</li>
+    </ul>
+
+    <hr>
+    <div class="row-wrap" style="justify-content:space-between;">
+      <a class="btn-ghost bare" href="01-quickstart.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M11 19l-7-7 7-7"/></svg>
+        Quickstart
+      </a>
+      <a class="btn bare" href="03-models.html">
+        Pick a model
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </article>
+</main>
+
+<footer class="foot">
+  <div class="shell foot-row">
+    <div><span class="chip"><span class="chip-dot"></span>v0.1</span> <span style="margin-left:14px;">MIT licensed.</span></div>
+    <div><a href="https://github.com/jasperan/onnx2oracle">GitHub</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

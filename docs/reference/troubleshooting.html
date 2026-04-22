@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Troubleshooting — onnx2oracle</title>
+<meta name="description" content="ORA-errors and Docker/HuggingFace gotchas mapped to fixes.">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1815'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='600' fill='%23f0ebe0' text-anchor='middle'%3Eo%3C/text%3E%3C/svg%3E">
+<script src="../assets/main.js" defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="shell topbar-inner">
+    <a class="brand bare" href="../index.html"><span class="brand-mark">o</span><span>onnx2oracle</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="../guide/01-quickstart.html">Quickstart</a>
+      <a href="../guide/02-how-it-works.html">How it works</a>
+      <a href="../guide/03-models.html">Models</a>
+      <a href="cli.html">CLI</a>
+      <a href="troubleshooting.html" aria-current="page">Troubleshooting</a>
+    </nav>
+    <div class="topbar-tools">
+      <button class="btn-ghost" data-theme-toggle aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span>Theme</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="shell doc-layout">
+
+  <aside class="doc-side" aria-label="Reference navigation">
+    <h4>Reference</h4>
+    <ol>
+      <li><a href="cli.html"><span class="n">R1</span>CLI</a></li>
+      <li><a href="troubleshooting.html" aria-current="page"><span class="n">R2</span>Troubleshooting</a></li>
+      <li><a href="model-matrix.html"><span class="n">R3</span>Model matrix</a></li>
+    </ol>
+    <h4 style="margin-top:22px;">On this page</h4>
+    <ol>
+      <li><a href="#ora-00942"><span class="n">·</span>ORA-00942</a></li>
+      <li><a href="#ora-20000"><span class="n">·</span>ORA-20000</a></li>
+      <li><a href="#ora-01031"><span class="n">·</span>ORA-01031</a></li>
+      <li><a href="#docker-timeout"><span class="n">·</span>Docker timeout</a></li>
+      <li><a href="#hf-download-fails"><span class="n">·</span>HF download fails</a></li>
+    </ol>
+  </aside>
+
+  <article class="doc-body">
+    <div class="eyebrow">Reference R2</div>
+    <h1>Troubleshooting</h1>
+    <p class="lede">Five failures cover the vast majority of real-world trouble. The CLI emits anchors from this page in its error messages, so you can paste the link directly from a stack trace.</p>
+
+    <section id="ora-00942">
+      <h2>ORA-00942 — table or view does not exist</h2>
+      <p>Usually raised when <code>verify</code> queries <code>user_mining_models</code>.</p>
+      <h3>What's happening</h3>
+      <p>The connected user lacks <code>SELECT ANY DICTIONARY</code>, or you're connected to an Oracle release older than 23ai. <code>DBMS_VECTOR</code> and the mining-model dictionary views only exist on 23ai and 26ai.</p>
+      <h3>Fix</h3>
+      <pre><code><span class="c">-- as an admin user</span>
+GRANT SELECT ANY DICTIONARY TO app_user;
+
+<span class="c">-- confirm the release</span>
+SELECT BANNER FROM v$version;</code></pre>
+      <p>If the banner says 19c or 21c, in-database ONNX models aren't available — use the Docker compose file or an ADB instance.</p>
+    </section>
+
+    <section id="ora-20000">
+      <h2>ORA-20000 — LOAD_ONNX_MODEL failed</h2>
+      <p>The loader hands Oracle a blob and Oracle rejects it. Two distinct causes.</p>
+
+      <h3>Cause A — opset mismatch</h3>
+      <p>Oracle's embedded ONNX runtime ingests up to opset 18 (as of 23ai/26ai). If the augmented graph was exported at a newer opset, the import aborts. The loader uses <code>onnx>=1.16</code> and emits opset 18 by default — this only bites if you're supplying pre-built ONNX bytes out of band.</p>
+      <h3>Fix A</h3>
+      <pre><code>$ pip install -U "onnx>=1.16"
+<span class="c"># then rebuild the augmented graph; onnx2oracle load does this itself</span></code></pre>
+
+      <h3>Cause B — wrong input tensor name</h3>
+      <p>The metadata JSON passed to <code>LOAD_ONNX_MODEL</code> declares the input tensor name. It <em>must</em> match the graph's actual input name. The built-in pipeline always uses <code>pre_text</code>. If you've modified the graph manually, either rename the tensor or update the metadata JSON to match.</p>
+      <h3>Fix B</h3>
+      <pre><code><span class="c"># inspect the graph</span>
+$ python -c "import onnx; m = onnx.load('model.onnx'); print([i.name for i in m.graph.input])"
+['pre_text']   <span class="c"># must match the metadata JSON</span></code></pre>
+    </section>
+
+    <section id="ora-01031">
+      <h2>ORA-01031 — insufficient privileges</h2>
+      <p>The connected user can't execute <code>DBMS_VECTOR.LOAD_ONNX_MODEL</code> or can't create a mining model.</p>
+      <h3>Fix</h3>
+      <pre><code><span class="c">-- as SYSDBA or an ADMIN role</span>
+GRANT EXECUTE ON DBMS_VECTOR TO app_user;
+GRANT CREATE MINING MODEL TO app_user;</code></pre>
+      <p>On ADB, the default <code>ADMIN</code> user already holds these. Non-admin users need them granted explicitly.</p>
+    </section>
+
+    <section id="docker-timeout">
+      <h2>Docker timeout on first startup</h2>
+      <p>The Oracle Free image initializes the database on first run. That pulls seed data, runs startup scripts, opens tablespaces — allow three to five minutes on typical hardware.</p>
+      <h3>What <code>--wait</code> does</h3>
+      <p><code>docker up --wait</code> polls the container's healthcheck at one-second intervals, up to ten minutes. It returns 0 when the healthcheck reports healthy, non-zero on timeout.</p>
+      <h3>If ten minutes isn't enough</h3>
+      <pre><code>$ onnx2oracle docker logs
+<span class="c"># look for ORACLE_DBA or FATAL entries</span></code></pre>
+      <p>Common causes:</p>
+      <ul>
+        <li>Docker host is memory-starved — Oracle Free needs ~4 GB during init.</li>
+        <li>The volume from a previous half-initialized run is corrupt — <code>onnx2oracle docker down --volumes</code> nukes it and starts over.</li>
+        <li>AArch64 host without emulation — the image is x86_64; enable Rosetta or qemu.</li>
+      </ul>
+    </section>
+
+    <section id="hf-download-fails">
+      <h2>HuggingFace download fails (4xx, gated models)</h2>
+      <p>Two symptoms, both from the <code>huggingface_hub</code> client.</p>
+
+      <h3>Symptom — 401 Unauthorized</h3>
+      <p>The repo is gated. Licensing on Nomic and some of the larger BGE variants flips between open and gated; the loader passes through whatever HuggingFace says.</p>
+      <h3>Fix</h3>
+      <pre><code>$ huggingface-cli login       <span class="c"># accepts the license in the browser</span>
+$ export HF_TOKEN=hf_***       <span class="c"># or set the env var directly</span>
+$ onnx2oracle load nomic-embed-text-v1</code></pre>
+
+      <h3>Symptom — HTTP timeout or partial download</h3>
+      <p>Large models (420 – 540 MB) on flaky networks. Two options:</p>
+      <ul>
+        <li>Run <code>onnx2oracle load</code> again — downloads resume from the cache and retry per-file.</li>
+        <li>Set <code>HF_HUB_DOWNLOAD_TIMEOUT=120</code> for slower links.</li>
+      </ul>
+    </section>
+
+    <hr>
+
+    <h2>Filing a new issue</h2>
+    <p>If the error you hit isn't here, the GitHub issue template asks for four things:</p>
+    <ol>
+      <li><code>onnx2oracle version</code> output.</li>
+      <li><code>SELECT BANNER FROM v$version;</code> output.</li>
+      <li>Exact command you ran (redact the password, keep everything else).</li>
+      <li>Full stack trace — the Python one <em>and</em> any <code>ORA-</code> line from the driver.</li>
+    </ol>
+
+    <hr>
+    <div class="row-wrap" style="justify-content:space-between;">
+      <a class="btn-ghost bare" href="cli.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M11 19l-7-7 7-7"/></svg>
+        CLI
+      </a>
+      <a class="btn bare" href="model-matrix.html">
+        Model matrix
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </article>
+</main>
+
+<footer class="foot">
+  <div class="shell foot-row">
+    <div><span class="chip"><span class="chip-dot"></span>v0.1</span> <span style="margin-left:14px;">MIT licensed.</span></div>
+    <div><a href="https://github.com/jasperan/onnx2oracle">GitHub</a></div>
+  </div>
+</footer>
+
+</body>
+</html>
