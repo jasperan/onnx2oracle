@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>For Coding Agents · onnx2oracle</title>
+<meta name="description" content="Copy-pastable instructions for coding agents to install ONNX embeddings into Oracle AI Database using onnx2oracle.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1815'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='600' fill='%23f0ebe0' text-anchor='middle'%3Eo%3C/text%3E%3C/svg%3E">
+<script src="assets/main.js" defer></script>
+<style>
+  /* Copy button tucked into <pre> blocks. No new design language, just positioning. */
+  .copy-wrap { position: relative; }
+  .copy-wrap pre { padding-right: 92px; }
+  .copy-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    appearance: none;
+    background: rgba(240, 235, 224, 0.08);
+    color: var(--code-dim);
+    border: 1px solid rgba(240, 235, 224, 0.12);
+    border-radius: 999px;
+    padding: 5px 11px;
+    font: 500 11.5px/1 ui-monospace, monospace;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .copy-btn:hover { color: var(--code-ink); border-color: rgba(240, 235, 224, 0.3); }
+  .copy-btn[data-copied="1"] { color: #9fbf8a; border-color: rgba(159, 191, 138, 0.4); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="shell topbar-inner">
+    <a class="brand bare" href="index.html">
+      <span class="brand-mark">o</span>
+      <span>onnx2oracle</span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="guide/01-quickstart.html">Quickstart</a>
+      <a href="guide/02-how-it-works.html">How it works</a>
+      <a href="guide/03-models.html">Models</a>
+      <a href="reference/cli.html">CLI</a>
+      <a href="reference/troubleshooting.html">Troubleshooting</a>
+      <a href="for-agents.html" aria-current="page">For Agents</a>
+    </nav>
+    <div class="topbar-tools">
+      <button class="btn-ghost" data-theme-toggle aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>
+        </svg>
+        <span>Theme</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="shell doc-layout">
+
+  <aside class="doc-side" aria-label="Page navigation">
+    <h4>On this page</h4>
+    <ol>
+      <li><a href="#invocation"><span class="n">01</span>Quick invocation</a></li>
+      <li><a href="#preflight"><span class="n">02</span>Preflight</a></li>
+      <li><a href="#path-a"><span class="n">03</span>Path A: Docker</a></li>
+      <li><a href="#path-b"><span class="n">04</span>Path B: existing DB</a></li>
+      <li><a href="#presets"><span class="n">05</span>Preset picker</a></li>
+      <li><a href="#custom"><span class="n">06</span>Custom HF model</a></li>
+      <li><a href="#query"><span class="n">07</span>Querying</a></li>
+      <li><a href="#verify"><span class="n">08</span>Verify success</a></li>
+      <li><a href="#troubleshooting"><span class="n">09</span>Troubleshooting</a></li>
+      <li><a href="#cleanup"><span class="n">10</span>Cleanup</a></li>
+      <li><a href="#rules"><span class="n">11</span>Agent rules</a></li>
+    </ol>
+    <h4 style="margin-top:22px;">The guide</h4>
+    <ol>
+      <li><a href="guide/01-quickstart.html"><span class="n">01</span>Quickstart</a></li>
+      <li><a href="guide/02-how-it-works.html"><span class="n">02</span>How it works</a></li>
+      <li><a href="guide/03-models.html"><span class="n">03</span>Pick a model</a></li>
+      <li><a href="guide/04-connect-to-cloud.html"><span class="n">04</span>ADB wallet</a></li>
+      <li><a href="guide/05-custom-models.html"><span class="n">05</span>Custom models</a></li>
+    </ol>
+  </aside>
+
+  <article class="doc-body">
+    <div class="eyebrow">For coding agents</div>
+    <h1>For Coding Agents</h1>
+    <p class="lede">
+      This page is meant to be pointed at by a human talking to a coding agent. Paste the URL into your
+      agent's context and it'll have everything it needs to install ONNX embeddings into an Oracle AI
+      Database using <code>onnx2oracle</code>.
+    </p>
+
+    <div class="callout">
+      <strong>How to use this page.</strong> If you're a human, copy the prompt below and point your agent at
+      this URL. If you're the agent, read top-to-bottom and run the commands in order. Don't skip the preflight.
+    </div>
+
+    <h2 id="invocation">Quick invocation</h2>
+    <p>Paste this into Claude, Codex, Gemini, or any other coding agent. Replace the bracketed part with
+      your target (local Docker, a DSN you already have, or a Cloud ADB wallet path).</p>
+
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>You are installing ONNX embeddings into an Oracle AI Database
+using onnx2oracle (https://github.com/jasperan/onnx2oracle).
+
+Read the instruction manual at:
+https://jasperan.github.io/onnx2oracle/for-agents.html
+
+Then: &lt;describe your target DB here, e.g. local Docker, Cloud
+ADB with wallet at /path/to/wallet, or a specific DSN. Name the
+preset model or say "default".&gt;
+
+Follow the manual step by step. Use the 5-preset list unless I
+specify otherwise. Run the verify command after loading and
+report the results back to me.</code></pre>
+    </div>
+
+    <h2 id="preflight">Agent preflight</h2>
+    <p>Confirm each of these before running any install commands. If a check fails, stop and tell the user
+      which one, with the exact output.</p>
+    <ol>
+      <li>Python 3.10+ is on the PATH. Run <code>python --version</code> or <code>python3 --version</code>.</li>
+      <li><code>pip</code> works. Run <code>pip --version</code>.</li>
+      <li>Either (a) Docker is running and the user is in the <code>docker</code> group, or (b) the user has a
+        reachable Oracle 23ai or 26ai instance and will provide a DSN.</li>
+      <li>Internet access is available for HuggingFace downloads. The default model is about 90 MB.</li>
+      <li>Roughly 2 GB of free RAM for the augmentation step. Peak is short (seconds), not sustained.</li>
+    </ol>
+
+    <h2 id="path-a">Install path A: local Docker</h2>
+    <p>Use this when the user doesn't have Oracle running yet. The first <code>docker up</code> takes 3 to 5
+      minutes because the PDB is opening for the first time. Don't abort on what looks like a hang.</p>
+
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>pip install onnx2oracle
+onnx2oracle docker up --wait      # 3-5 min cold start while PDB opens
+onnx2oracle load all-MiniLM-L6-v2 --target local
+onnx2oracle verify --target local</code></pre>
+    </div>
+
+    <h3>What success looks like</h3>
+    <ul>
+      <li><code>onnx2oracle docker up --wait</code> ends with <code>ready</code>. If it spins past 5 minutes,
+        tail the logs with <code>onnx2oracle docker logs -f</code>.</li>
+      <li><code>onnx2oracle load</code> ends with <code>model registered as ALL_MINILM_L6_V2</code>.</li>
+      <li><code>onnx2oracle verify</code> prints <code>VECTOR_EMBEDDING returned 384-d</code> and
+        <code>cosine(self, self) = 1.000000</code>.</li>
+    </ul>
+
+    <h2 id="path-b">Install path B: existing Oracle instance</h2>
+    <p>Use this when the user already has Oracle 23ai or 26ai running (self-hosted, on-prem, or Cloud ADB).
+      Set <code>ORACLE_DSN</code> in the environment; don't hardcode it.</p>
+
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>pip install onnx2oracle
+export ORACLE_DSN='user/password@host:port/service'
+onnx2oracle load all-MiniLM-L6-v2
+onnx2oracle verify</code></pre>
+    </div>
+
+    <h3>Privileges the DB user needs</h3>
+    <ul>
+      <li><code>CREATE MINING MODEL</code></li>
+      <li><code>EXECUTE ON DBMS_VECTOR</code></li>
+      <li><code>SELECT ANY DICTIONARY</code> (or <code>SELECT</code> on <code>user_mining_models</code>)</li>
+    </ul>
+    <p>If the user can't grant these, escalate. Oracle refuses the load without them, and the errors look
+      cryptic (see troubleshooting below).</p>
+
+    <h2 id="presets">Preset picker</h2>
+    <p>Five vetted presets. Pick by the user's constraint (speed, quality, long docs, language). If the user
+      says "default", pick <code>all-MiniLM-L6-v2</code>.</p>
+
+    <table data-sortable>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Dims</th>
+          <th>Size</th>
+          <th>Pooling</th>
+          <th>When to pick</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">all-MiniLM-L6-v2</td>
+          <td>384</td>
+          <td>~90 MB</td>
+          <td>mean</td>
+          <td>Default. Fastest, smallest. Good for most English search.</td>
+        </tr>
+        <tr>
+          <td class="mono">all-MiniLM-L12-v2</td>
+          <td>384</td>
+          <td>~130 MB</td>
+          <td>mean</td>
+          <td>Slightly better quality than L6, still fast.</td>
+        </tr>
+        <tr>
+          <td class="mono">all-mpnet-base-v2</td>
+          <td>768</td>
+          <td>~420 MB</td>
+          <td>mean</td>
+          <td>Best quality among mean-pooled English models.</td>
+        </tr>
+        <tr>
+          <td class="mono">bge-small-en-v1.5</td>
+          <td>384</td>
+          <td>~130 MB</td>
+          <td>cls</td>
+          <td>Strong retrieval benchmarks. CLS pooling (loader handles it).</td>
+        </tr>
+        <tr>
+          <td class="mono">nomic-embed-text-v1</td>
+          <td>768</td>
+          <td>~540 MB</td>
+          <td>mean</td>
+          <td>8192-token context. Best for long documents.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="custom">Custom HuggingFace model</h2>
+    <p>If the user wants a model outside the preset list, use <code>--from-huggingface</code>.</p>
+
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>onnx2oracle load my-model --from-huggingface sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2</code></pre>
+    </div>
+
+    <div class="callout">
+      <strong>SentencePiece is not supported.</strong> Models built on XLM-R, e5, or other SentencePiece
+      tokenizers raise a clear <code>NotImplementedError</code> at augmentation time. WordPiece-based models
+      (BERT, MiniLM, MPNet, BGE) work. If the user needs multilingual, point them at
+      <code>microsoft/Multilingual-MiniLM-L12-H384</code> as a WordPiece alternative.
+    </div>
+
+    <h2 id="query">Querying once loaded</h2>
+    <p>The canonical one-liner. Substitute the Oracle model name the loader printed.</p>
+
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>SELECT VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING 'hello world' AS DATA) AS v
+FROM dual;</code></pre>
+    </div>
+
+    <p>Wiring it into a table with a vector column:</p>
+
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>CREATE TABLE docs (
+  id        NUMBER PRIMARY KEY,
+  content   CLOB,
+  embedding VECTOR(384, FLOAT32)
+);
+
+INSERT INTO docs (id, content, embedding)
+VALUES (1, :text, VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING :text AS DATA));</code></pre>
+    </div>
+
+    <p>Dimension must match the preset. 384 for MiniLM and BGE-small, 768 for MPNet and Nomic.</p>
+
+    <h2 id="verify">Verifying success</h2>
+    <p>Run <code>onnx2oracle verify</code> (or <code>verify --target local</code> for Docker). It runs four
+      checks. Report the output back verbatim:</p>
+    <ol>
+      <li><strong>Connected.</strong> The DSN resolves and the session opens.</li>
+      <li><strong>Registered.</strong> The model is present in <code>user_mining_models</code>.</li>
+      <li><strong>Shape.</strong> <code>VECTOR_EMBEDDING</code> returns the expected dimension count and the
+        L2 norm is approximately 1.0.</li>
+      <li><strong>Semantics.</strong> <code>cosine(king, queen) &gt; cosine(king, banana)</code>. If this
+        flips, the pooling layer is wrong for the model.</li>
+    </ol>
+
+    <p>Good output looks like:</p>
+<pre><code>$ onnx2oracle verify --target local
+  model: ALL_MINILM_L6_V2
+  VECTOR_EMBEDDING(...) returned 384-d ... ok
+  cosine(self, self) = 1.000000 ... ok
+  cosine(cat, dog)   = 0.672 ... sensible</code></pre>
+
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <p>Map the error the user sees to one of these. If the actual message isn't here, check the
+      <a href="reference/troubleshooting.html">full troubleshooting page</a>.</p>
+
+    <h3 id="ora-00942">ORA-00942: user_mining_models does not exist</h3>
+    <p>Either the DB user lacks <code>SELECT ANY DICTIONARY</code>, or the instance is older than 23ai.
+      <code>DBMS_VECTOR</code> and <code>user_mining_models</code> landed in 23ai. Confirm version with
+      <code>SELECT banner FROM v$version;</code> and escalate if it's 19c or older.</p>
+
+    <h3 id="ora-20000">ORA-20000: LOAD_ONNX_MODEL failed</h3>
+    <p>Usually an opset mismatch. Rebuild with <code>onnx&gt;=1.16</code> and opset 18. The other common
+      cause is an input-tensor name mismatch; Oracle expects the model's text input to be named
+      <code>pre_text</code>. The loader sets this, but a hand-built custom graph might not.</p>
+
+    <h3 id="ora-01031">ORA-01031: insufficient privileges</h3>
+    <p>Grant the missing privileges as SYSDBA:</p>
+<pre><code>GRANT EXECUTE ON DBMS_VECTOR TO &lt;user&gt;;
+GRANT CREATE MINING MODEL TO &lt;user&gt;;</code></pre>
+    <p>Then retry <code>onnx2oracle load</code>.</p>
+
+    <h3 id="sentencepiece">NotImplementedError about SentencePiece</h3>
+    <p>Full message looks like: <code>... SentencePiece ... cannot be represented as a BertTokenizer ONNX
+      graph</code>. The tokenizer-wrapping step only supports WordPiece. Swap to a WordPiece model such as
+      <code>microsoft/Multilingual-MiniLM-L12-H384</code> and retry.</p>
+
+    <h3 id="docker-hang">Fresh install + onnx2oracle docker up hangs</h3>
+    <p>Normal on first run. The PDB cold start takes 3 to 5 minutes. Tail the logs to confirm progress:</p>
+<pre><code>onnx2oracle docker logs -f</code></pre>
+    <p>If logs are silent for more than 10 minutes, the container probably crashed. Check
+      <code>docker ps -a</code> and restart.</p>
+
+    <h3 id="docker-perm">Docker permission denied</h3>
+    <p>The user isn't in the <code>docker</code> group. Either add them
+      (<code>sudo usermod -aG docker $USER</code> then log out and back in) or fall back to path B with
+      an existing Oracle instance via <code>ORACLE_DSN</code>.</p>
+
+    <h2 id="cleanup">Cleanup</h2>
+    <p>Drop a loaded model from Oracle:</p>
+
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>BEGIN DBMS_VECTOR.DROP_ONNX_MODEL(model_name =&gt; 'ALL_MINILM_L6_V2', force =&gt; TRUE); END;
+/</code></pre>
+    </div>
+
+    <p>Stop the local Docker container:</p>
+
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>onnx2oracle docker down</code></pre>
+    </div>
+
+    <p>Add <code>--volumes</code> to <code>docker down</code> to wipe the PDB data volume too.</p>
+
+    <h2 id="rules">Agent rules of thumb</h2>
+    <ul>
+      <li>Never commit credentials. <code>ORACLE_DSN</code> belongs in the user's environment, not in code.</li>
+      <li>Always run <code>verify</code> right after <code>load</code>. Report the four-line output back verbatim.</li>
+      <li>If the user says "use the default" without naming a model, pick <code>all-MiniLM-L6-v2</code>.</li>
+      <li>If a model with the same Oracle name already exists, ask the user before passing <code>--force</code>.</li>
+      <li>Oracle identifiers are uppercase with underscores. The CLI normalizes HF-style names (e.g.
+        <code>all-MiniLM-L6-v2</code> becomes <code>ALL_MINILM_L6_V2</code>) automatically.</li>
+    </ul>
+
+    <hr>
+
+    <div class="row-wrap" style="justify-content:space-between;">
+      <a class="btn-ghost bare" href="index.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M11 19l-7-7 7-7"/></svg>
+        Home
+      </a>
+      <a class="btn bare" href="guide/01-quickstart.html">
+        Full quickstart
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </article>
+</main>
+
+<footer class="foot">
+  <div class="shell foot-row">
+    <div><span class="chip"><span class="chip-dot"></span>v0.1</span> <span style="margin-left:14px;">MIT licensed.</span></div>
+    <div>
+      <a href="https://github.com/jasperan/onnx2oracle">GitHub</a>
+      &nbsp;&middot;&nbsp;
+      <a href="llms.txt">llms.txt</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Copy-to-clipboard for [data-copy] buttons. Falls back to execCommand if clipboard API is blocked.
+  (function () {
+    'use strict';
+    document.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('[data-copy]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var pre = btn.parentElement && btn.parentElement.querySelector('pre code');
+          if (!pre) return;
+          var text = pre.innerText;
+          var done = function () {
+            btn.textContent = 'Copied';
+            btn.setAttribute('data-copied', '1');
+            setTimeout(function () {
+              btn.textContent = 'Copy';
+              btn.removeAttribute('data-copied');
+            }, 1600);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, function () { done(); });
+          } else {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (e) {}
+            document.body.removeChild(ta);
+            done();
+          }
+        });
+      });
+    });
+  })();
+</script>
+
+</body>
+</html>

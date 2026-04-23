@@ -1,0 +1,88 @@
+# onnx2oracle
+
+> Load ONNX embedding models into Oracle AI Database with one command.
+
+onnx2oracle is a Python CLI and library that downloads sentence-transformer models from HuggingFace, augments them with an ONNX tokenizer, pooling, and L2 normalization, and registers them in Oracle AI Database 23ai or 26ai. Once loaded, `VECTOR_EMBEDDING(MODEL USING :text AS DATA)` runs entirely in-database. No sidecar service, no network hop.
+
+## Install
+
+Path A, local Docker:
+
+```
+pip install onnx2oracle
+onnx2oracle docker up --wait
+onnx2oracle load all-MiniLM-L6-v2 --target local
+onnx2oracle verify --target local
+```
+
+Path B, existing Oracle 23ai or 26ai instance:
+
+```
+pip install onnx2oracle
+export ORACLE_DSN='user/password@host:port/service'
+onnx2oracle load all-MiniLM-L6-v2
+onnx2oracle verify
+```
+
+Required privileges: `CREATE MINING MODEL`, `EXECUTE ON DBMS_VECTOR`, `SELECT ANY DICTIONARY`.
+
+## Presets
+
+- all-MiniLM-L6-v2: 384 dims, ~90 MB, mean pool. Default. Fastest, smallest.
+- all-MiniLM-L12-v2: 384 dims, ~130 MB, mean pool. Slightly better quality than L6.
+- all-mpnet-base-v2: 768 dims, ~420 MB, mean pool. Best quality among mean-pooled English models.
+- bge-small-en-v1.5: 384 dims, ~130 MB, CLS pool. Strong retrieval benchmarks.
+- nomic-embed-text-v1: 768 dims, ~540 MB, mean pool. 8192-token context for long documents.
+
+Custom HuggingFace models via `onnx2oracle load NAME --from-huggingface REPO`. SentencePiece-based tokenizers (e5, XLM-R) are not supported and raise `NotImplementedError`; use WordPiece models.
+
+## Query
+
+```
+SELECT VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING 'hello world' AS DATA) AS v
+FROM dual;
+```
+
+Wire it into a table:
+
+```
+CREATE TABLE docs (
+  id        NUMBER PRIMARY KEY,
+  content   CLOB,
+  embedding VECTOR(384, FLOAT32)
+);
+
+INSERT INTO docs (id, content, embedding)
+VALUES (1, :text, VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING :text AS DATA));
+```
+
+Dimension must match the preset: 384 for MiniLM and BGE-small, 768 for MPNet and Nomic.
+
+## Docs
+
+- [Full guide](https://jasperan.github.io/onnx2oracle/)
+- [For coding agents](https://jasperan.github.io/onnx2oracle/for-agents.html)
+- [Quickstart](https://jasperan.github.io/onnx2oracle/guide/01-quickstart.html)
+- [How it works](https://jasperan.github.io/onnx2oracle/guide/02-how-it-works.html)
+- [Model matrix](https://jasperan.github.io/onnx2oracle/reference/model-matrix.html)
+- [CLI reference](https://jasperan.github.io/onnx2oracle/reference/cli.html)
+- [Troubleshooting](https://jasperan.github.io/onnx2oracle/reference/troubleshooting.html)
+- [GitHub](https://github.com/jasperan/onnx2oracle)
+- [PyPI](https://pypi.org/project/onnx2oracle/)
+
+## Troubleshooting
+
+- ORA-00942: user_mining_models does not exist. Oracle 23ai or 26ai is required, and the user needs dictionary access.
+- ORA-20000: LOAD_ONNX_MODEL failed. Rebuild with onnx>=1.16, opset 18. The metadata input tensor must be named `pre_text`.
+- ORA-01031: insufficient privileges. Grant EXECUTE ON DBMS_VECTOR and CREATE MINING MODEL to the DB user.
+- NotImplementedError about SentencePiece. Use a WordPiece-based model instead (e.g. microsoft/Multilingual-MiniLM-L12-H384).
+- onnx2oracle docker up hangs on first run. Normal. PDB cold start takes 3 to 5 minutes. Tail `onnx2oracle docker logs -f` to confirm progress.
+- Docker permission denied. Add the user to the `docker` group, or use an existing Oracle instance via ORACLE_DSN.
+
+## Agent rules
+
+- Never commit credentials. ORACLE_DSN belongs in the environment.
+- Always run `verify` after `load`. Report the four-line output verbatim.
+- If the user says "default" and doesn't name a model, pick all-MiniLM-L6-v2.
+- Pass `--force` only after confirming with the user if a model name already exists.
+- Oracle identifiers are uppercase with underscores. The CLI normalizes HF-style names automatically.
