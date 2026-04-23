@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>For Coding Agents · onnx2oracle</title>
-<meta name="description" content="Copy-pastable instructions for coding agents to install ONNX embeddings into Oracle AI Database using onnx2oracle.">
+<meta name="description" content="Library-agnostic manual teaching coding agents how to load any ONNX embedding model into Oracle AI Database using raw Python and SQL.">
 <link rel="stylesheet" href="assets/style.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1815'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='600' fill='%23f0ebe0' text-anchor='middle'%3Eo%3C/text%3E%3C/svg%3E">
 <script src="assets/main.js" defer></script>
@@ -63,17 +63,17 @@
   <aside class="doc-side" aria-label="Page navigation">
     <h4>On this page</h4>
     <ol>
-      <li><a href="#invocation"><span class="n">01</span>Quick invocation</a></li>
-      <li><a href="#preflight"><span class="n">02</span>Preflight</a></li>
-      <li><a href="#path-a"><span class="n">03</span>Path A: Docker</a></li>
-      <li><a href="#path-b"><span class="n">04</span>Path B: existing DB</a></li>
-      <li><a href="#presets"><span class="n">05</span>Preset picker</a></li>
-      <li><a href="#custom"><span class="n">06</span>Custom HF model</a></li>
-      <li><a href="#query"><span class="n">07</span>Querying</a></li>
-      <li><a href="#verify"><span class="n">08</span>Verify success</a></li>
+      <li><a href="#hero"><span class="n">01</span>What this is</a></li>
+      <li><a href="#prompt"><span class="n">02</span>Prompt block</a></li>
+      <li><a href="#prereqs"><span class="n">03</span>Prerequisites</a></li>
+      <li><a href="#model"><span class="n">04</span>Mental model</a></li>
+      <li><a href="#build"><span class="n">05</span>Build the ONNX</a></li>
+      <li><a href="#load"><span class="n">06</span>Load into Oracle</a></li>
+      <li><a href="#verify"><span class="n">07</span>Verify</a></li>
+      <li><a href="#security"><span class="n">08</span>Security</a></li>
       <li><a href="#troubleshooting"><span class="n">09</span>Troubleshooting</a></li>
-      <li><a href="#cleanup"><span class="n">10</span>Cleanup</a></li>
-      <li><a href="#rules"><span class="n">11</span>Agent rules</a></li>
+      <li><a href="#presets"><span class="n">10</span>Model cheatsheet</a></li>
+      <li><a href="#appendix"><span class="n">11</span>Appendix</a></li>
     </ol>
     <h4 style="margin-top:22px;">The guide</h4>
     <ol>
@@ -87,268 +87,539 @@
 
   <article class="doc-body">
     <div class="eyebrow">For coding agents</div>
-    <h1>For Coding Agents</h1>
+    <h1 id="hero">For Coding Agents</h1>
     <p class="lede">
-      This page is meant to be pointed at by a human talking to a coding agent. Paste the URL into your
-      agent's context and it'll have everything it needs to install ONNX embeddings into an Oracle AI
-      Database using <code>onnx2oracle</code>.
+      This page teaches a coding agent how to load any sentence-transformer ONNX model into an
+      Oracle AI Database 23ai or 26ai instance using raw Python and SQL. Paste this URL into your
+      agent, give it a target model plus DSN, and it'll write the code itself.
     </p>
 
     <div class="callout">
-      <strong>How to use this page.</strong> If you're a human, copy the prompt below and point your agent at
-      this URL. If you're the agent, read top-to-bottom and run the commands in order. Don't skip the preflight.
+      <strong>How to read this page.</strong> If you're a human, copy the prompt block below and point your
+      agent at this URL. If you're the agent, read top-to-bottom and write the code yourself. The manual is
+      self-contained: no outside lookups needed.
     </div>
 
-    <h2 id="invocation">Quick invocation</h2>
-    <p>Paste this into Claude, Codex, Gemini, or any other coding agent. Replace the bracketed part with
-      your target (local Docker, a DSN you already have, or a Cloud ADB wallet path).</p>
+    <h2 id="prompt">Prompt block</h2>
+    <p>Paste this into Claude, Codex, Gemini, or any other coding agent. Fill in the bracketed
+      target details before sending.</p>
 
     <div class="copy-wrap">
       <button class="copy-btn" type="button" data-copy>Copy</button>
-<pre><code>You are installing ONNX embeddings into an Oracle AI Database
-using onnx2oracle (https://github.com/jasperan/onnx2oracle).
+<pre><code>You are loading an ONNX embedding model into an Oracle AI Database
+26ai instance.
 
-Read the instruction manual at:
+Read the manual at:
 https://jasperan.github.io/onnx2oracle/for-agents.html
 
-Then: &lt;describe your target DB here, e.g. local Docker, Cloud
-ADB with wallet at /path/to/wallet, or a specific DSN. Name the
-preset model or say "default".&gt;
+Target: &lt;describe your model (e.g. "sentence-transformers/all-MiniLM-L6-v2")
+and DSN (user/pw@host:port/service)&gt;.
 
-Follow the manual step by step. Use the 5-preset list unless I
-specify otherwise. Run the verify command after loading and
-report the results back to me.</code></pre>
+Write the code yourself following the manual. Don't add external CLI
+dependencies. Use python-oracledb, onnx, onnxruntime, onnxruntime-extensions,
+transformers, and huggingface_hub only. Run the verification query at the
+end and report its output back.</code></pre>
     </div>
 
-    <h2 id="preflight">Agent preflight</h2>
-    <p>Confirm each of these before running any install commands. If a check fails, stop and tell the user
-      which one, with the exact output.</p>
-    <ol>
-      <li>Python 3.10+ is on the PATH. Run <code>python --version</code> or <code>python3 --version</code>.</li>
-      <li><code>pip</code> works. Run <code>pip --version</code>.</li>
-      <li>Either (a) Docker is running and the user is in the <code>docker</code> group, or (b) the user has a
-        reachable Oracle 23ai or 26ai instance and will provide a DSN.</li>
-      <li>Internet access is available for HuggingFace downloads. The default model is about 90 MB.</li>
-      <li>Roughly 2 GB of free RAM for the augmentation step. Peak is short (seconds), not sustained.</li>
-    </ol>
+    <h2 id="prereqs">Prerequisites</h2>
+    <p>Confirm each of these before writing any code. If a check fails, stop and tell the user
+      exactly which one.</p>
+    <ul>
+      <li>Oracle AI Database <strong>23ai or 26ai</strong>. The <code>DBMS_VECTOR</code> package and
+        <code>VECTOR_EMBEDDING</code> landed in 23ai. Check with
+        <code>SELECT BANNER FROM v$version;</code>.</li>
+      <li>DB user has <code>CREATE MINING MODEL</code> and <code>EXECUTE ON DBMS_VECTOR</code>.
+        Check with:
+<pre><code>SELECT * FROM user_sys_privs WHERE privilege IN ('CREATE MINING MODEL');
+SELECT * FROM user_tab_privs WHERE table_name = 'DBMS_VECTOR';</code></pre></li>
+      <li>Python 3.10 or newer.</li>
+      <li>Packages installed:
+<pre><code>pip install onnx onnxruntime onnxruntime-extensions transformers huggingface-hub oracledb</code></pre></li>
+      <li>About 2 GB of free RAM during augmentation. The final ONNX is usually 90 to 540 MB
+        depending on the model.</li>
+    </ul>
 
-    <h2 id="path-a">Install path A: local Docker</h2>
-    <p>Use this when the user doesn't have Oracle running yet. The first <code>docker up</code> takes 3 to 5
-      minutes because the PDB is opening for the first time. Don't abort on what looks like a hang.</p>
+    <h2 id="model">Mental model of the task</h2>
+    <p>The goal is a <strong>single self-contained ONNX graph</strong> whose input is a raw string
+      and whose output is a normalized float32 vector. Oracle invokes the graph through
+      <code>DBMS_VECTOR.LOAD_ONNX_MODEL</code> and queries it with
+      <code>VECTOR_EMBEDDING(MODEL USING :text AS DATA)</code>.</p>
+
+    <p>The core problem: HuggingFace ships a Python tokenizer. Oracle needs that tokenizer
+      compiled into the ONNX graph itself. This page bridges the gap.</p>
+
+    <div class="diagram" aria-label="Pipeline diagram: string input flows through tokenizer, transformer, pooling, L2 normalization, to a dim-length vector">
+      <svg viewBox="0 0 880 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+          </marker>
+          <style>
+            .box { fill: var(--bg); stroke: var(--ink); stroke-width: 1.2; }
+            .accent { fill: var(--accent); }
+            .io { fill: var(--bg-sunk); stroke: var(--ink-muted); stroke-width: 1.2; stroke-dasharray: 3 3; }
+            .lbl { fill: var(--ink); font: 520 13px/1 ui-sans-serif, system-ui, sans-serif; }
+            .lbl-sm { fill: var(--ink-faint); font: 500 10.5px/1 ui-monospace, monospace; letter-spacing: 0.06em; }
+            .axis { stroke: var(--ink-muted); stroke-width: 1; }
+          </style>
+        </defs>
+
+        <g color="currentColor">
+          <rect class="io" x="12" y="82" width="118" height="56" rx="10"/>
+          <text class="lbl-sm" x="71" y="102" text-anchor="middle">STRING INPUT</text>
+          <text class="lbl" x="71" y="124" text-anchor="middle">pre_text</text>
+
+          <line class="axis" x1="130" y1="110" x2="172" y2="110" marker-end="url(#ar)"/>
+
+          <rect class="box" x="172" y="70" width="130" height="80" rx="10"/>
+          <text class="lbl-sm" x="237" y="94" text-anchor="middle">STAGE 1</text>
+          <text class="lbl" x="237" y="115" text-anchor="middle">Tokenizer</text>
+          <text class="lbl-sm" x="237" y="135" text-anchor="middle">ort-extensions</text>
+
+          <line class="axis" x1="302" y1="110" x2="344" y2="110" marker-end="url(#ar)"/>
+
+          <rect class="box" x="344" y="70" width="130" height="80" rx="10"/>
+          <text class="lbl-sm" x="409" y="94" text-anchor="middle">STAGE 2</text>
+          <text class="lbl" x="409" y="115" text-anchor="middle">Transformer</text>
+          <text class="lbl-sm" x="409" y="135" text-anchor="middle">HF encoder</text>
+
+          <line class="axis" x1="474" y1="110" x2="516" y2="110" marker-end="url(#ar)"/>
+
+          <rect class="box" x="516" y="70" width="130" height="80" rx="10"/>
+          <text class="lbl-sm" x="581" y="94" text-anchor="middle">STAGE 3</text>
+          <text class="lbl" x="581" y="115" text-anchor="middle">Mean / CLS pool</text>
+          <text class="lbl-sm" x="581" y="135" text-anchor="middle">ReduceMean · Gather</text>
+
+          <line class="axis" x1="646" y1="110" x2="688" y2="110" marker-end="url(#ar)"/>
+
+          <rect class="box" x="688" y="70" width="120" height="80" rx="10"/>
+          <text class="lbl-sm" x="748" y="94" text-anchor="middle">STAGE 4</text>
+          <text class="lbl" x="748" y="115" text-anchor="middle">L2 normalize</text>
+          <text class="lbl-sm" x="748" y="135" text-anchor="middle">Pow·Sum·Sqrt·Div</text>
+
+          <line class="axis" x1="808" y1="110" x2="848" y2="110" marker-end="url(#ar)"/>
+
+          <rect class="io" x="744" y="170" width="120" height="40" rx="8"/>
+          <text class="lbl-sm" x="804" y="188" text-anchor="middle">FLOAT32 OUT</text>
+          <text class="lbl" x="804" y="204" text-anchor="middle">embedding[dims]</text>
+          <line class="axis" x1="805" y1="150" x2="805" y2="170" marker-end="url(#ar)"/>
+
+          <line class="axis" x1="172" y1="40" x2="808" y2="40"/>
+          <line class="axis" x1="172" y1="40" x2="172" y2="52"/>
+          <line class="axis" x1="808" y1="40" x2="808" y2="52"/>
+          <text class="lbl-sm accent" x="490" y="28" text-anchor="middle" fill="currentColor">SINGLE ONNX GRAPH</text>
+        </g>
+      </svg>
+      <div class="diagram-caption">One input (<code>pre_text</code>), one output (<code>embedding</code>), four internal stages fused into a single ONNX graph.</div>
+    </div>
+
+    <h2 id="build">Build the augmented ONNX</h2>
+    <p>Seven stages. Use MiniLM-L6 as the worked example and parametrize where the agent would
+      generalize. Every block is copy-pastable.</p>
+
+    <h3>Stage 1: download the core transformer ONNX</h3>
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>from huggingface_hub import hf_hub_download
+
+HF_REPO = "sentence-transformers/all-MiniLM-L6-v2"
+core_path = hf_hub_download(HF_REPO, "onnx/model.onnx")</code></pre>
+    </div>
+    <p>Some repos don't ship a pre-exported ONNX. In that case, export via
+      <code>transformers.onnx</code> or the <code>optimum</code> exporter first, then point
+      <code>core_path</code> at the resulting file.</p>
+
+    <h3>Stage 2: wrap the tokenizer as ONNX ops</h3>
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>from transformers import AutoTokenizer
+from onnxruntime_extensions import gen_processing_models
+
+tokenizer = AutoTokenizer.from_pretrained(HF_REPO)
+pre_model, _ = gen_processing_models(
+    tokenizer, pre_kwargs={}, post_kwargs=None, opset=14,
+)</code></pre>
+    </div>
+
+    <div class="callout">
+      <strong>Tokenizer compatibility.</strong> BertTokenizer-based models (WordPiece vocab) work.
+      SentencePiece and Unigram tokenizers (XLM-R, LLaMA, T5, e5) do NOT work:
+      <code>gen_processing_models</code> produces ragged outputs Oracle's BertTokenizer op can't
+      consume. Skip those, or convert offline with a custom tokenizer op.
+    </div>
+
+    <h3>Stage 3: align opsets and merge</h3>
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>import onnx
+from onnx import compose, version_converter
+
+core_model = onnx.load(core_path)
+core_model = version_converter.convert_version(core_model, 18)
+core_model.ir_version = pre_model.ir_version
+
+# Copy custom opset domains from pre-model to core
+core_domains = {o.domain for o in core_model.opset_import}
+for o in pre_model.opset_import:
+    if o.domain not in core_domains:
+        new_o = core_model.opset_import.add()
+        new_o.domain = o.domain
+        new_o.version = o.version</code></pre>
+    </div>
+
+    <h3>Stage 3b: unsqueeze tokenizer outputs from [seq_len] to [1, seq_len]</h3>
+    <p>The tokenizer emits 1-D tensors. The transformer expects 2-D (batch + sequence). Insert an
+      <code>Unsqueeze(axis=0)</code> on each relevant output.</p>
 
     <div class="copy-wrap">
       <button class="copy-btn" type="button" data-copy>Copy</button>
-<pre><code>pip install onnx2oracle
-onnx2oracle docker up --wait      # 3-5 min cold start while PDB opens
-onnx2oracle load all-MiniLM-L6-v2 --target local
-onnx2oracle verify --target local</code></pre>
+<pre><code>import numpy as np
+from onnx import helper, numpy_helper, TensorProto
+
+# Only touch tensor names that actually exist in the pre-model outputs.
+# (MPNet-style encoders have no token_type_ids; RoBERTa does not either.)
+pre_output_names = {o.name for o in pre_model.graph.output}
+core_input_names = {i.name for i in core_model.graph.input}
+bert_tensor_names = [
+    n for n in ("input_ids", "token_type_ids", "attention_mask")
+    if n in pre_output_names
+]
+
+# Add a shared axes=[0] initializer for the Unsqueeze ops.
+axes_0 = numpy_helper.from_array(np.array([0], dtype=np.int64), name="unsqueeze_axes_0")
+pre_model.graph.initializer.append(axes_0)
+
+for name in bert_tensor_names:
+    flat_name = f"{name}_flat"
+    # Rename the tokenizer's raw output so we can feed it into Unsqueeze.
+    for node in pre_model.graph.node:
+        for i, out in enumerate(node.output):
+            if out == name:
+                node.output[i] = flat_name
+    # Emit Unsqueeze(flat_name, axes=[0]) -> original name.
+    pre_model.graph.node.append(
+        helper.make_node("Unsqueeze", [flat_name, "unsqueeze_axes_0"], [name])
+    )
+    # Update the graph-output shape declaration to [1, sequence_length].
+    for out in pre_model.graph.output:
+        if out.name == name:
+            shape = out.type.tensor_type.shape
+            while len(shape.dim) > 0:
+                shape.dim.pop()
+            shape.dim.add().dim_value = 1
+            shape.dim.add().dim_param = "sequence_length"</code></pre>
     </div>
 
-    <h3>What success looks like</h3>
-    <ul>
-      <li><code>onnx2oracle docker up --wait</code> ends with <code>ready</code>. If it spins past 5 minutes,
-        tail the logs with <code>onnx2oracle docker logs -f</code>.</li>
-      <li><code>onnx2oracle load</code> ends with <code>model registered as ALL_MINILM_L6_V2</code>.</li>
-      <li><code>onnx2oracle verify</code> prints <code>VECTOR_EMBEDDING returned 384-d</code> and
-        <code>cosine(self, self) = 1.000000</code>.</li>
-    </ul>
+    <h3>Stage 3c: merge pre + core via compose</h3>
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>io_map = [
+    ("input_ids", "input_ids"),
+    ("attention_mask", "attention_mask"),
+    ("token_type_ids", "token_type_ids"),
+]
+# Keep only tensors present in both sides. RoBERTa-style tokenizers skip
+# token_type_ids; MPNet cores skip it too.
+io_map = [(a, b) for a, b in io_map
+          if a in pre_output_names and b in core_input_names]
 
-    <h2 id="path-b">Install path B: existing Oracle instance</h2>
-    <p>Use this when the user already has Oracle 23ai or 26ai running (self-hosted, on-prem, or Cloud ADB).
-      Set <code>ORACLE_DSN</code> in the environment; don't hardcode it.</p>
+merged = compose.merge_models(
+    pre_model, core_model, io_map=io_map, prefix1="pre_", prefix2="core_",
+)
+
+# Strip existing outputs; we'll declare the embedding output explicitly later.
+while len(merged.graph.output) > 0:
+    merged.graph.output.pop()</code></pre>
+    </div>
+    <p>The <code>prefix1="pre_"</code> argument matters: it determines the final input tensor name.
+      In this example, the merged graph's input becomes <code>pre_text</code>. Oracle's metadata
+      JSON must reference that exact name.</p>
+
+    <h3>Stage 4: add pooling</h3>
+    <p>Two options, depending on the model. <strong>Mean pooling</strong> for MiniLM, MPNet, and
+      Nomic:</p>
 
     <div class="copy-wrap">
       <button class="copy-btn" type="button" data-copy>Copy</button>
-<pre><code>pip install onnx2oracle
-export ORACLE_DSN='user/password@host:port/service'
-onnx2oracle load all-MiniLM-L6-v2
-onnx2oracle verify</code></pre>
+<pre><code>import numpy as np
+from onnx import helper, numpy_helper, TensorProto
+
+pool_axes = numpy_helper.from_array(np.array([1], dtype=np.int64), name="pool_axes_1")
+merged.graph.initializer.append(pool_axes)
+merged.graph.node.append(
+    helper.make_node(
+        "ReduceMean", ["core_last_hidden_state", "pool_axes_1"],
+        ["pooled"], keepdims=0,
+    ),
+)</code></pre>
     </div>
 
-    <h3>Privileges the DB user needs</h3>
-    <ul>
-      <li><code>CREATE MINING MODEL</code></li>
-      <li><code>EXECUTE ON DBMS_VECTOR</code></li>
-      <li><code>SELECT ANY DICTIONARY</code> (or <code>SELECT</code> on <code>user_mining_models</code>)</li>
-    </ul>
-    <p>If the user can't grant these, escalate. Oracle refuses the load without them, and the errors look
-      cryptic (see troubleshooting below).</p>
+    <p><strong>CLS pooling</strong> for BGE-style models:</p>
 
-    <h2 id="presets">Preset picker</h2>
-    <p>Five vetted presets. Pick by the user's constraint (speed, quality, long docs, language). If the user
-      says "default", pick <code>all-MiniLM-L6-v2</code>.</p>
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>cls_idx = numpy_helper.from_array(np.array([0], dtype=np.int64), name="cls_idx")
+sq_axes = numpy_helper.from_array(np.array([1], dtype=np.int64), name="cls_sq_axes")
+merged.graph.initializer.append(cls_idx)
+merged.graph.initializer.append(sq_axes)
+merged.graph.node.append(
+    helper.make_node(
+        "Gather", ["core_last_hidden_state", "cls_idx"],
+        ["pooled_gathered"], axis=1,
+    ),
+)
+merged.graph.node.append(
+    helper.make_node("Squeeze", ["pooled_gathered", "cls_sq_axes"], ["pooled"]),
+)</code></pre>
+    </div>
+
+    <h3>Stage 5: L2 normalize</h3>
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>pow_exp = numpy_helper.from_array(np.array(2.0, dtype=np.float32), name="pow_exp")
+axes_neg1 = numpy_helper.from_array(np.array([-1], dtype=np.int64), name="axes_neg1")
+eps = numpy_helper.from_array(np.array(1e-12, dtype=np.float32), name="eps_val")
+merged.graph.initializer.extend([pow_exp, axes_neg1, eps])
+
+merged.graph.node.append(helper.make_node("Pow", ["pooled", "pow_exp"], ["squared"]))
+merged.graph.node.append(
+    helper.make_node("ReduceSum", ["squared", "axes_neg1"], ["sum_sq"], keepdims=1),
+)
+merged.graph.node.append(helper.make_node("Sqrt", ["sum_sq"], ["l2_norm"]))
+merged.graph.node.append(helper.make_node("Max", ["l2_norm", "eps_val"], ["l2_safe"]))
+merged.graph.node.append(helper.make_node("Div", ["pooled", "l2_safe"], ["emb_2d"]))</code></pre>
+    </div>
+
+    <h3>Stage 6: squeeze the batch dim and declare the final output</h3>
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>sq_final = numpy_helper.from_array(np.array([0], dtype=np.int64), name="sq_final_axes")
+merged.graph.initializer.append(sq_final)
+merged.graph.node.append(
+    helper.make_node("Squeeze", ["emb_2d", "sq_final_axes"], ["embedding"]),
+)
+
+EMBEDDING_DIMS = 384  # change to match your model (768 for MPNet/Nomic, etc.)
+merged.graph.output.append(
+    helper.make_tensor_value_info("embedding", TensorProto.FLOAT, [EMBEDDING_DIMS]),
+)
+
+# Fix leftover dynamic batch dims so Oracle's runtime can infer shapes.
+for vi in list(merged.graph.value_info) + list(merged.graph.input):
+    for dim in vi.type.tensor_type.shape.dim:
+        if dim.dim_param == "batch_size":
+            dim.ClearField("dim_param")
+            dim.dim_value = 1
+
+onnx.checker.check_model(merged)
+augmented_bytes = merged.SerializeToString()</code></pre>
+    </div>
+
+    <h3>Stage 7 (optional): sanity-check on CPU before uploading</h3>
+    <p>Run the graph locally with onnxruntime to confirm shape and L2 norm before sending ~100 MB
+      over the network.</p>
+
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>import onnxruntime as ort
+from onnxruntime_extensions import get_library_path
+
+so = ort.SessionOptions()
+so.register_custom_ops_library(get_library_path())
+sess = ort.InferenceSession(
+    augmented_bytes, sess_options=so, providers=["CPUExecutionProvider"],
+)
+vec = sess.run(None, {"pre_text": np.array(["hello world"])})[0]
+assert vec.shape == (EMBEDDING_DIMS,)
+assert 0.99 &lt; float(np.linalg.norm(vec)) &lt; 1.01</code></pre>
+    </div>
+
+    <h2 id="load">Load into Oracle</h2>
+    <p>Oracle's <code>DBMS_VECTOR.LOAD_ONNX_MODEL</code> has an overload that takes the model as a
+      raw BLOB argument. No need to write the file to disk first.</p>
+
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>import json
+import oracledb
+
+conn = oracledb.connect(
+    user=USER, password=PASSWORD,
+    dsn=f"{HOST}:{PORT}/{SERVICE}",
+    tcp_connect_timeout=30,
+)
+
+# Oracle identifier: uppercase, letters/digits/underscores, starts with letter or _.
+ORACLE_NAME = "ALL_MINILM_L6_V2"
+
+metadata = json.dumps({
+    "function": "embedding",
+    "embeddingOutput": "embedding",
+    # The input tensor name comes from prefix1="pre_" plus the original
+    # tokenizer input name ("text"). Match it exactly.
+    "input": {"pre_text": ["DATA"]},
+})
+
+cur = conn.cursor()
+cur.execute("""
+    BEGIN
+        DBMS_VECTOR.LOAD_ONNX_MODEL(
+            model_name =&gt; :model_name,
+            model_data =&gt; :model_data,
+            metadata   =&gt; JSON(:metadata)
+        );
+    END;
+""", {
+    "model_name": ORACLE_NAME,
+    "model_data": augmented_bytes,
+    "metadata": metadata,
+})
+conn.commit()</code></pre>
+    </div>
+
+    <div class="callout">
+      <strong>Reloading an existing model.</strong> If <code>ORACLE_NAME</code> already exists,
+      Oracle raises ORA-20000. Drop the old one first:
+<pre><code>cur.execute("""
+    BEGIN DBMS_VECTOR.DROP_ONNX_MODEL(model_name =&gt; :n, force =&gt; TRUE); END;
+""", {"n": ORACLE_NAME})
+conn.commit()</code></pre>
+    </div>
+
+    <h2 id="verify">Verify</h2>
+    <p>Three checks: shape, L2 norm, and semantic sanity. Run all three and report the output.</p>
+
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>import math
+import json
+
+# Note: VECTOR_EMBEDDING takes the model name as a SQL token, not a bind
+# variable. The ORACLE_NAME must be validated (see Security section below).
+cur.execute(f"""
+    SELECT VECTOR_EMBEDDING({ORACLE_NAME} USING :t AS DATA) FROM dual
+""", {"t": "hello world"})
+vec = cur.fetchone()[0]
+v = list(vec) if not isinstance(vec, str) else json.loads(vec)
+print(f"dims={len(v)}")  # expect 384 for MiniLM
+
+norm = math.sqrt(sum(x * x for x in v))
+print(f"norm={norm:.6f}")  # expect ~1.0
+
+def embed(text):
+    cur.execute(
+        f"SELECT VECTOR_EMBEDDING({ORACLE_NAME} USING :t AS DATA) FROM dual",
+        {"t": text},
+    )
+    r = cur.fetchone()[0]
+    return list(r) if not isinstance(r, str) else json.loads(r)
+
+def cosine(a, b):
+    return sum(x * y for x, y in zip(a, b, strict=True)) / (
+        math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
+    )
+
+vk, vq, vb = embed("king"), embed("queen"), embed("banana")
+assert cosine(vk, vq) &gt; cosine(vk, vb), "semantic similarity is broken"
+print("verification passed.")</code></pre>
+    </div>
+
+    <h2 id="security">Security: guard the model name against SQL injection</h2>
+    <p><code>VECTOR_EMBEDDING</code> takes the model identifier as a SQL token, not a bind. So the
+      name must be validated before any f-string interpolation.</p>
+
+    <div class="copy-wrap">
+      <button class="copy-btn" type="button" data-copy>Copy</button>
+<pre><code>import re
+
+_SAFE = re.compile(r"^[A-Z_][A-Z0-9_]{0,127}$")
+
+def safe_oracle_name(name: str) -&gt; str:
+    if not _SAFE.match(name):
+        raise ValueError(f"invalid Oracle identifier: {name!r}")
+    return name
+
+# Apply to every model name before interpolation.
+ORACLE_NAME = safe_oracle_name(ORACLE_NAME)</code></pre>
+    </div>
+    <p>All other values (the input text, model blob, metadata) go through bind variables already.
+      The model name is the one place where a raw SQL identifier is unavoidable.</p>
+
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <ul>
+      <li><strong>ORA-00942: table or view does not exist</strong> when querying
+        <code>user_mining_models</code>. The DB user lacks <code>SELECT ANY DICTIONARY</code>, or
+        the instance is pre-23ai.</li>
+      <li><strong>ORA-20000: LOAD_ONNX_MODEL failed</strong>. Two causes. First: opset mismatch.
+        Rebuild with <code>onnx&gt;=1.16</code> and opset 18. Second: the metadata JSON's input
+        tensor name doesn't match the graph. It must equal whatever the <code>prefix1=</code>
+        argument produced (e.g. <code>pre_text</code>).</li>
+      <li><strong>ORA-01031: insufficient privileges</strong>. As SYSDBA, run:
+        <code>GRANT EXECUTE ON DBMS_VECTOR TO &lt;user&gt;; GRANT CREATE MINING MODEL TO &lt;user&gt;;</code>.</li>
+      <li><strong>ORA-40XXX or BertTokenizer errors at load</strong>. The tokenizer's vocabulary
+        doesn't contain what Oracle expects (usually a SentencePiece model). Swap to a
+        WordPiece-based model, e.g. <code>microsoft/Multilingual-MiniLM-L12-H384</code> for
+        multilingual use cases.</li>
+      <li><strong>First-call slowness</strong>. Oracle compiles the ONNX on the first call per
+        session. Expect 100 to 500 ms cold, then under 20 ms for subsequent calls.</li>
+    </ul>
+
+    <h2 id="presets">Model cheatsheet</h2>
+    <p>Five models known to work end-to-end with this exact pipeline. All are WordPiece. Pick by
+      the constraint that matters (speed, quality, long docs, language).</p>
 
     <table data-sortable>
       <thead>
         <tr>
-          <th>Name</th>
+          <th>HF repo</th>
           <th>Dims</th>
           <th>Size</th>
           <th>Pooling</th>
-          <th>When to pick</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td class="mono">all-MiniLM-L6-v2</td>
+          <td class="mono">sentence-transformers/all-MiniLM-L6-v2</td>
           <td>384</td>
           <td>~90 MB</td>
           <td>mean</td>
-          <td>Default. Fastest, smallest. Good for most English search.</td>
         </tr>
         <tr>
-          <td class="mono">all-MiniLM-L12-v2</td>
+          <td class="mono">sentence-transformers/all-MiniLM-L12-v2</td>
           <td>384</td>
           <td>~130 MB</td>
           <td>mean</td>
-          <td>Slightly better quality than L6, still fast.</td>
         </tr>
         <tr>
-          <td class="mono">all-mpnet-base-v2</td>
+          <td class="mono">sentence-transformers/all-mpnet-base-v2</td>
           <td>768</td>
           <td>~420 MB</td>
           <td>mean</td>
-          <td>Best quality among mean-pooled English models.</td>
         </tr>
         <tr>
-          <td class="mono">bge-small-en-v1.5</td>
+          <td class="mono">BAAI/bge-small-en-v1.5</td>
           <td>384</td>
           <td>~130 MB</td>
           <td>cls</td>
-          <td>Strong retrieval benchmarks. CLS pooling (loader handles it).</td>
         </tr>
         <tr>
-          <td class="mono">nomic-embed-text-v1</td>
+          <td class="mono">nomic-ai/nomic-embed-text-v1</td>
           <td>768</td>
           <td>~540 MB</td>
           <td>mean</td>
-          <td>8192-token context. Best for long documents.</td>
         </tr>
       </tbody>
     </table>
 
-    <h2 id="custom">Custom HuggingFace model</h2>
-    <p>If the user wants a model outside the preset list, use <code>--from-huggingface</code>.</p>
+    <h2 id="appendix">Appendix: if you'd rather just pip install something</h2>
+    <p>This entire manual is packaged as a CLI if you don't need to customize the pipeline:</p>
 
-    <div class="copy-wrap">
-      <button class="copy-btn" type="button" data-copy>Copy</button>
-<pre><code>onnx2oracle load my-model --from-huggingface sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2</code></pre>
-    </div>
+<pre><code>pip install onnx2oracle
+onnx2oracle load all-MiniLM-L6-v2 --target local</code></pre>
 
-    <div class="callout">
-      <strong>SentencePiece is not supported.</strong> Models built on XLM-R, e5, or other SentencePiece
-      tokenizers raise a clear <code>NotImplementedError</code> at augmentation time. WordPiece-based models
-      (BERT, MiniLM, MPNet, BGE) work. If the user needs multilingual, point them at
-      <code>microsoft/Multilingual-MiniLM-L12-H384</code> as a WordPiece alternative.
-    </div>
-
-    <h2 id="query">Querying once loaded</h2>
-    <p>The canonical one-liner. Substitute the Oracle model name the loader printed.</p>
-
-    <div class="copy-wrap">
-      <button class="copy-btn" type="button" data-copy>Copy</button>
-<pre><code>SELECT VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING 'hello world' AS DATA) AS v
-FROM dual;</code></pre>
-    </div>
-
-    <p>Wiring it into a table with a vector column:</p>
-
-    <div class="copy-wrap">
-      <button class="copy-btn" type="button" data-copy>Copy</button>
-<pre><code>CREATE TABLE docs (
-  id        NUMBER PRIMARY KEY,
-  content   CLOB,
-  embedding VECTOR(384, FLOAT32)
-);
-
-INSERT INTO docs (id, content, embedding)
-VALUES (1, :text, VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING :text AS DATA));</code></pre>
-    </div>
-
-    <p>Dimension must match the preset. 384 for MiniLM and BGE-small, 768 for MPNet and Nomic.</p>
-
-    <h2 id="verify">Verifying success</h2>
-    <p>Run <code>onnx2oracle verify</code> (or <code>verify --target local</code> for Docker). It runs four
-      checks. Report the output back verbatim:</p>
-    <ol>
-      <li><strong>Connected.</strong> The DSN resolves and the session opens.</li>
-      <li><strong>Registered.</strong> The model is present in <code>user_mining_models</code>.</li>
-      <li><strong>Shape.</strong> <code>VECTOR_EMBEDDING</code> returns the expected dimension count and the
-        L2 norm is approximately 1.0.</li>
-      <li><strong>Semantics.</strong> <code>cosine(king, queen) &gt; cosine(king, banana)</code>. If this
-        flips, the pooling layer is wrong for the model.</li>
-    </ol>
-
-    <p>Good output looks like:</p>
-<pre><code>$ onnx2oracle verify --target local
-  model: ALL_MINILM_L6_V2
-  VECTOR_EMBEDDING(...) returned 384-d ... ok
-  cosine(self, self) = 1.000000 ... ok
-  cosine(cat, dog)   = 0.672 ... sensible</code></pre>
-
-    <h2 id="troubleshooting">Troubleshooting</h2>
-    <p>Map the error the user sees to one of these. If the actual message isn't here, check the
-      <a href="reference/troubleshooting.html">full troubleshooting page</a>.</p>
-
-    <h3 id="ora-00942">ORA-00942: user_mining_models does not exist</h3>
-    <p>Either the DB user lacks <code>SELECT ANY DICTIONARY</code>, or the instance is older than 23ai.
-      <code>DBMS_VECTOR</code> and <code>user_mining_models</code> landed in 23ai. Confirm version with
-      <code>SELECT banner FROM v$version;</code> and escalate if it's 19c or older.</p>
-
-    <h3 id="ora-20000">ORA-20000: LOAD_ONNX_MODEL failed</h3>
-    <p>Usually an opset mismatch. Rebuild with <code>onnx&gt;=1.16</code> and opset 18. The other common
-      cause is an input-tensor name mismatch; Oracle expects the model's text input to be named
-      <code>pre_text</code>. The loader sets this, but a hand-built custom graph might not.</p>
-
-    <h3 id="ora-01031">ORA-01031: insufficient privileges</h3>
-    <p>Grant the missing privileges as SYSDBA:</p>
-<pre><code>GRANT EXECUTE ON DBMS_VECTOR TO &lt;user&gt;;
-GRANT CREATE MINING MODEL TO &lt;user&gt;;</code></pre>
-    <p>Then retry <code>onnx2oracle load</code>.</p>
-
-    <h3 id="sentencepiece">NotImplementedError about SentencePiece</h3>
-    <p>Full message looks like: <code>... SentencePiece ... cannot be represented as a BertTokenizer ONNX
-      graph</code>. The tokenizer-wrapping step only supports WordPiece. Swap to a WordPiece model such as
-      <code>microsoft/Multilingual-MiniLM-L12-H384</code> and retry.</p>
-
-    <h3 id="docker-hang">Fresh install + onnx2oracle docker up hangs</h3>
-    <p>Normal on first run. The PDB cold start takes 3 to 5 minutes. Tail the logs to confirm progress:</p>
-<pre><code>onnx2oracle docker logs -f</code></pre>
-    <p>If logs are silent for more than 10 minutes, the container probably crashed. Check
-      <code>docker ps -a</code> and restart.</p>
-
-    <h3 id="docker-perm">Docker permission denied</h3>
-    <p>The user isn't in the <code>docker</code> group. Either add them
-      (<code>sudo usermod -aG docker $USER</code> then log out and back in) or fall back to path B with
-      an existing Oracle instance via <code>ORACLE_DSN</code>.</p>
-
-    <h2 id="cleanup">Cleanup</h2>
-    <p>Drop a loaded model from Oracle:</p>
-
-    <div class="copy-wrap">
-      <button class="copy-btn" type="button" data-copy>Copy</button>
-<pre><code>BEGIN DBMS_VECTOR.DROP_ONNX_MODEL(model_name =&gt; 'ALL_MINILM_L6_V2', force =&gt; TRUE); END;
-/</code></pre>
-    </div>
-
-    <p>Stop the local Docker container:</p>
-
-    <div class="copy-wrap">
-      <button class="copy-btn" type="button" data-copy>Copy</button>
-<pre><code>onnx2oracle docker down</code></pre>
-    </div>
-
-    <p>Add <code>--volumes</code> to <code>docker down</code> to wipe the PDB data volume too.</p>
-
-    <h2 id="rules">Agent rules of thumb</h2>
-    <ul>
-      <li>Never commit credentials. <code>ORACLE_DSN</code> belongs in the user's environment, not in code.</li>
-      <li>Always run <code>verify</code> right after <code>load</code>. Report the four-line output back verbatim.</li>
-      <li>If the user says "use the default" without naming a model, pick <code>all-MiniLM-L6-v2</code>.</li>
-      <li>If a model with the same Oracle name already exists, ask the user before passing <code>--force</code>.</li>
-      <li>Oracle identifiers are uppercase with underscores. The CLI normalizes HF-style names (e.g.
-        <code>all-MiniLM-L6-v2</code> becomes <code>ALL_MINILM_L6_V2</code>) automatically.</li>
-    </ul>
+    <p>The <code>onnx2oracle</code> CLI wraps everything on this page into one command. Use it when
+      you want the shortest path. Use the manual above when you need to customize pooling, swap the
+      tokenizer, or target an unusual model architecture.</p>
 
     <hr>
 
@@ -357,8 +628,8 @@ GRANT CREATE MINING MODEL TO &lt;user&gt;;</code></pre>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M11 19l-7-7 7-7"/></svg>
         Home
       </a>
-      <a class="btn bare" href="guide/01-quickstart.html">
-        Full quickstart
+      <a class="btn bare" href="guide/02-how-it-works.html">
+        How it works (visual)
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
       </a>
     </div>
