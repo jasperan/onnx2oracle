@@ -214,18 +214,26 @@ SELECT * FROM user_tab_privs WHERE table_name = 'DBMS_VECTOR';</code></pre></li>
     </div>
 
     <h2 id="build">Build the augmented ONNX</h2>
-    <p>Seven stages. Use MiniLM-L6 as the worked example and parametrize where the agent would
-      generalize. Every block is copy-pastable.</p>
+    <p>Seven stages build the graph in-memory. Two more sections after this one
+      (<a href="#load">Load</a>, <a href="#verify">Verify</a>) ship it to Oracle and confirm it
+      works. Use MiniLM-L6 as the worked example; parametrize where an agent would generalize.
+      Every block is copy-pastable.</p>
 
     <h3>Stage 1: download the core transformer ONNX</h3>
     <div class="copy-wrap">
       <button class="copy-btn" type="button" data-copy>Copy</button>
-<pre><code>from huggingface_hub import hf_hub_download
+<pre><code>from huggingface_hub import hf_hub_download, list_repo_files
 
 HF_REPO = "sentence-transformers/all-MiniLM-L6-v2"
-core_path = hf_hub_download(HF_REPO, "onnx/model.onnx")</code></pre>
+core_path = hf_hub_download(HF_REPO, "onnx/model.onnx")
+
+# Some repos store weights in a sidecar file next to model.onnx (e.g. model.onnx_data
+# or similar). Pull any external-data files in the onnx/ folder so onnx.load finds them.
+for f in list_repo_files(HF_REPO):
+    if f.startswith("onnx/") and f != "onnx/model.onnx":
+        hf_hub_download(HF_REPO, f)</code></pre>
     </div>
-    <p>Some repos don't ship a pre-exported ONNX. In that case, export via
+    <p>Some repos don't ship a pre-exported ONNX at all. In that case, export via
       <code>transformers.onnx</code> or the <code>optimum</code> exporter first, then point
       <code>core_path</code> at the resulting file.</p>
 
