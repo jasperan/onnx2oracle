@@ -9,7 +9,10 @@ from dataclasses import dataclass
 from getpass import getpass
 from pathlib import Path
 
-import tomllib
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 DEFAULT_CONFIG_PATH = Path.home() / ".onnx2oracle" / "config.toml"
 
