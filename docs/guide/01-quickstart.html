@@ -68,20 +68,32 @@
         <div class="step-num">01</div>
         <div>
           <h3>Start Oracle 26ai Free</h3>
-          <p>First run downloads the image (~3 GB) and initializes the database. Expect three to five minutes. The <code>--wait</code> flag polls <code>healthcheck</code> so the command only returns when the listener is up.</p>
-          <pre><code>$ onnx2oracle docker up --wait
+          <p>First run downloads the image and initializes the database. Expect three to five minutes. The <code>--wait</code> flag runs a bounded SQL readiness probe so the command only returns when the PDB accepts connections.</p>
+          <pre><code>$ onnx2oracle docker up --wait --wait-timeout 900
   pulling container-registry.oracle.com/database/free:latest
   starting onnx2oracle-oracle ...
-  waiting for healthcheck ....... ready</code></pre>
+  waiting for SQL readiness ....... ready</code></pre>
         </div>
       </div>
 
       <div class="step">
         <div class="step-num">02</div>
         <div>
+          <h3>Preflight the database</h3>
+          <p><code>preflight</code> checks the banner, <code>DBMS_VECTOR</code>, <code>VECTOR_EMBEDDING</code>, mining-model privileges, and the mining-model catalog before you spend time building an ONNX graph.</p>
+          <pre><code>$ onnx2oracle preflight --target local
+  Connected ... ok
+  DBMS_VECTOR package ... ok
+  VECTOR_EMBEDDING function ... ok</code></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">03</div>
+        <div>
           <h3>Load the default model</h3>
           <p>With no <code>--target</code> or <code>--dsn</code>, the loader uses the local compose DSN:
-            <code>system/onnx2oracle@localhost:1521/FREEPDB1</code>. The augmented ONNX is built in memory and
+            <code>system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1</code>. The augmented ONNX is built in memory and
             streamed to Oracle as a BLOB — nothing touches the filesystem of the database container.</p>
           <pre><code>$ onnx2oracle load all-MiniLM-L6-v2 --target local
   downloading sentence-transformers/all-MiniLM-L6-v2 (90 MB)
@@ -94,7 +106,7 @@
       </div>
 
       <div class="step">
-        <div class="step-num">03</div>
+        <div class="step-num">04</div>
         <div>
           <h3>Verify</h3>
           <p><code>verify</code> embeds a canned string twice, asserts the output is 384-d float32, and confirms
@@ -108,7 +120,7 @@
       </div>
 
       <div class="step">
-        <div class="step-num">04</div>
+        <div class="step-num">05</div>
         <div>
           <h3>Embed your own rows</h3>
           <p>Straight SQL from here on. The model name is the one printed above.</p>
@@ -126,6 +138,7 @@ FROM dual;</code></pre>
 
     <h2>If something went wrong</h2>
     <ul>
+      <li>Port 1521 is already allocated — rerun with <code>ORACLE_PORT=1524 onnx2oracle docker up --wait</code>.</li>
       <li>Healthcheck never returned — see <a href="../reference/troubleshooting.html#docker-timeout">#docker-timeout</a>.</li>
       <li><code>ORA-20000: LOAD_ONNX_MODEL failed</code> — see <a href="../reference/troubleshooting.html#ora-20000">#ora-20000</a>.</li>
       <li><code>ORA-01031: insufficient privileges</code> — see <a href="../reference/troubleshooting.html#ora-01031">#ora-01031</a>.</li>

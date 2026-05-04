@@ -15,29 +15,35 @@ Published to PyPI as `onnx2oracle`. Python 3.10+. CLI entry point: `onnx2oracle`
 conda create -n onnx2oracle python=3.12 -y && conda activate onnx2oracle
 pip install -e ".[dev]"
 
-# Lint / format-check (matches CI)
-ruff check src/ tests/
+# Lint / format-check (matches CI plus local scripts)
+ruff check src/ tests/ scripts/
 
-# Fast tests (19 unit tests, no network, no DB)
+# Fast tests (no network, no DB)
 pytest tests/ -v -m "not slow and not integration"
 
 # Slow tests (real HuggingFace downloads, still no DB)
 pytest tests/test_pipeline.py -v -m slow
 
 # Integration test — needs a live Oracle 26ai Free container
-ORACLE_DSN='system/yourpw@localhost:1521/FREEPDB1' \
+ORACLE_PORT=1524 ORACLE_DSN='system/yourpw@localhost:1524/FREEPDB1' \
   pytest tests/test_loader_integration.py --run-integration -v
 
 # Single test
 pytest tests/test_pipeline.py::test_build_augmented_minilm -v
 
 # Local Oracle container (via the CLI, which uses the packaged compose file)
-onnx2oracle docker up --wait     # first boot ~3-5 min
-onnx2oracle docker down
+ORACLE_PORT=1524 onnx2oracle docker up --wait --wait-timeout 900
+ORACLE_PORT=1524 onnx2oracle docker down
 
 # End-to-end loop
+onnx2oracle preflight --target local
 onnx2oracle load all-MiniLM-L6-v2 --target local
 onnx2oracle verify --target local
+
+# Evidence loops
+ORACLE_PORT=1524 scripts/run_real_db_integration.sh
+ORACLE_PORT=1524 scripts/check_model_compatibility.py all-MiniLM-L6-v2
+scripts/render_preset_tables.py --check
 
 # Release (PyPI) — after version bumps in pyproject.toml AND src/onnx2oracle/__init__.py
 rm -rf dist/ build/ src/*.egg-info && python -m build && twine upload dist/*
@@ -53,7 +59,7 @@ Flow: HuggingFace repo → augmented ONNX bytes → Oracle `DBMS_VECTOR.LOAD_ONN
 
 This is the non-obvious part. `build_augmented(spec)` returns raw bytes of a single ONNX graph with input `pre_text: string[1]` and output `embedding: float32[dims]`:
 
-1. **Download core transformer** — prefers `onnx/model.onnx` from the HF repo; falls back to PyTorch `AutoModel` + `transformers.onnx.export` at opset 14.
+1. **Download core transformer** — prefers `onnx/model.onnx` from the HF repo, detects ONNX external-data sidecars, downloads those sidecars from the repo's `onnx/` folder, and falls back to PyTorch `AutoModel` + `transformers.onnx.export` at opset 14.
 2. **Generate tokenizer ONNX** via `onnxruntime_extensions.gen_processing_models(tokenizer, opset=14)`. If the tokenizer class isn't directly supported (e.g. MPNet, XLM-R) or doesn't emit the BERT-style `input_ids`/`attention_mask`/`token_type_ids` outputs, it falls back to `BertTokenizerFast`. If the vocab lacks `[UNK]` (i.e. SentencePiece/Unigram), it raises `NotImplementedError` — Oracle's BertTokenizer op cannot represent SentencePiece models like XLM-R or multilingual-e5.
 3. **Align opsets** — bumps core to opset 18 via `version_converter`, syncs `ir_version`, and copies any custom domains from the tokenizer subgraph.
 4. **Unsqueeze tokenizer outputs** — tokenizer emits `[seq_len]`, core expects `[1, seq_len]`. Rewires node outputs through `*_flat` and appends `Unsqueeze` nodes.
@@ -72,7 +78,7 @@ Oracle's `VECTOR_EMBEDDING(<model_name> USING :text AS DATA)` takes the model na
 
 ### DSN resolution (`src/onnx2oracle/connection.py`)
 
-Precedence: `--dsn` flag → `ORACLE_DSN` env → `~/.onnx2oracle/config.toml` (`[default] dsn = "…"`) → `--target local` shortcut (`system/onnx2oracle@localhost:1521/FREEPDB1`) → interactive prompt (tty only).
+Precedence: `--dsn` flag → `ORACLE_DSN` env → `~/.onnx2oracle/config.toml` (`[default] dsn = "…"`) → `--target local` shortcut (`system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1`) → interactive prompt (tty only).
 
 The CLI's `load` and `verify` commands auto-default to `--target local` when *none* of the first four are set, so the zero-config docker-compose flow works.
 
@@ -88,13 +94,13 @@ Two copies exist intentionally:
 - `src/onnx2oracle/data/docker-compose.yml` — shipped inside the wheel; the CLI's `docker up/down/logs` subcommands point at this via `importlib.resources.files("onnx2oracle") / "data" / "docker-compose.yml"`.
 - `docker/docker-compose.yml` — dev-only copy for git-clone workflow.
 
-Both honor `ORACLE_PWD` (default `onnx2oracle`) and expose port 1521. Healthcheck retries for 10 minutes during the slow first PDB open.
+Both honor `ORACLE_PWD` (default `onnx2oracle`), `ORACLE_PORT` (default `1521`), and `ORACLE_IMAGE` (default `container-registry.oracle.com/database/free:latest`). The CLI's `docker up --wait` runs a bounded SQL readiness probe; tune it with `--wait-timeout` and `--wait-interval`.
 
 ## Testing notes
 
 - `tests/conftest.py` adds the `--run-integration` flag. Integration tests are **skipped by default** even if you pass `-m integration` — you also need `--run-integration`.
 - `test_pipeline.py::test_build_augmented_*` is marked `slow` because it actually downloads models from HuggingFace (~90 MB–540 MB depending on preset). CI skips these.
-- `test_loader_integration.py` expects a live Oracle and reads `ORACLE_DSN`.
+- `test_loader_integration.py` expects a live Oracle and reads `ORACLE_DSN`, or `ORACLE_PWD`/`ORACLE_PORT` for the local shortcut defaults.
 - Unit tests don't need network or DB; CI runs them on the 3.10 / 3.11 / 3.12 matrix.
 
 ## CI

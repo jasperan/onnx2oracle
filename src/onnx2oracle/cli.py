@@ -16,6 +16,7 @@ from onnx2oracle import __version__
 from onnx2oracle.connection import DEFAULT_CONFIG_PATH, resolve_dsn
 from onnx2oracle.loader import upload_model
 from onnx2oracle.pipeline import build_augmented
+from onnx2oracle.preflight import run_preflight
 from onnx2oracle.presets import PRESETS, ModelSpec, get_preset
 from onnx2oracle.verify import smoke_test
 
@@ -133,6 +134,36 @@ def load(
 
 
 @app.command()
+def preflight(
+    target: str | None = typer.Option(None, help="'local' for Docker shortcut."),
+    dsn: str | None = typer.Option(None, help="Full DSN."),
+) -> None:
+    """Check whether the target database is ready for ONNX model loading."""
+    if (
+        target is None
+        and dsn is None
+        and "ORACLE_DSN" not in os.environ
+        and not DEFAULT_CONFIG_PATH.exists()
+    ):
+        console.print("[dim]No DSN configured — defaulting to --target local (docker-compose).[/dim]")
+        target = "local"
+
+    dsn_resolved = resolve_dsn(cli_dsn=dsn, target=target)
+    console.print(f"[green]Target:[/green] {dsn_resolved.display()}")
+
+    result = run_preflight(dsn_resolved)
+
+    def _mark(ok: bool) -> str:
+        return "[green]✓[/green]" if ok else "[red]✗[/red]"
+
+    for check in result.checks:
+        console.print(f"{_mark(check.ok)} {check.name}: {check.detail}")
+    console.print(f"[dim]Elapsed: {result.elapsed_ms} ms[/dim]")
+    if not result.ok:
+        raise typer.Exit(1)
+
+
+@app.command()
 def verify(
     name: str | None = typer.Option(None, help="Oracle model name (defaults to ALL_MINILM_L6_V2)."),
     target: str | None = typer.Option(None, help="'local' for Docker shortcut."),
@@ -174,33 +205,72 @@ def verify(
 # Docker subcommands
 
 DOCKER_COMPOSE = files("onnx2oracle") / "data" / "docker-compose.yml"
+DEFAULT_DOCKER_WAIT_TIMEOUT_SECONDS = 600
+DEFAULT_DOCKER_WAIT_INTERVAL_SECONDS = 5
 
 
 def _compose(*args: str) -> int:
     return subprocess.call(["docker", "compose", "-f", str(DOCKER_COMPOSE), *args])
 
 
+def _wait_for_oracle(timeout_seconds: int, interval_seconds: int) -> int:
+    probe = f"""
+set -eu
+dsn="system/${{ORACLE_PWD:-onnx2oracle}}@localhost:1521/FREEPDB1"
+deadline=$((SECONDS + {timeout_seconds}))
+while [ "$SECONDS" -lt "$deadline" ]; do
+  if echo 'select 1 from dual;' | sqlplus -L -S "$dsn" >/dev/null 2>&1; then
+    echo ready
+    exit 0
+  fi
+  sleep {interval_seconds}
+done
+echo "timed out after {timeout_seconds}s waiting for Oracle at localhost:1521/FREEPDB1" >&2
+exit 1
+""".strip()
+    return _compose("exec", "-T", "oracle", "bash", "-lc", probe)
+
+
 @docker_app.command("up")
-def docker_up(wait: bool = typer.Option(True, help="Wait for healthcheck to pass.")) -> None:
+def docker_up(
+    wait: bool = typer.Option(True, "--wait/--no-wait", help="Wait for a SQL readiness probe to pass."),
+    wait_timeout: int = typer.Option(
+        DEFAULT_DOCKER_WAIT_TIMEOUT_SECONDS,
+        "--wait-timeout",
+        min=1,
+        help="Seconds to wait before failing the SQL readiness probe.",
+    ),
+    wait_interval: int = typer.Option(
+        DEFAULT_DOCKER_WAIT_INTERVAL_SECONDS,
+        "--wait-interval",
+        min=1,
+        help="Seconds between SQL readiness probes.",
+    ),
+) -> None:
     """Start the Oracle 26ai Free container."""
     rc = _compose("up", "-d")
     if rc != 0:
         raise typer.Exit(rc)
     if wait:
-        console.print("[yellow]Waiting for Oracle to be ready (first start is ~3-5 min)...[/yellow]")
-        probe = (
-            "until echo 'select 1 from dual;' | "
-            "sqlplus -S system/onnx2oracle@localhost:1521/FREEPDB1 >/dev/null 2>&1; "
-            "do sleep 5; done; echo ready"
+        console.print(
+            "[yellow]Waiting for Oracle SQL readiness "
+            f"(timeout={wait_timeout}s, interval={wait_interval}s)...[/yellow]"
         )
-        _compose("exec", "-T", "oracle", "bash", "-lc", probe)
+        rc = _wait_for_oracle(timeout_seconds=wait_timeout, interval_seconds=wait_interval)
+        if rc != 0:
+            raise typer.Exit(rc)
     console.print("[bold green]✓ Oracle up.[/bold green]")
 
 
 @docker_app.command("down")
-def docker_down() -> None:
+def docker_down(volumes: bool = typer.Option(False, "--volumes", "-v", help="Remove the database volume too.")) -> None:
     """Stop the Oracle container."""
-    _compose("down")
+    args = ["down"]
+    if volumes:
+        args.append("--volumes")
+    rc = _compose(*args)
+    if rc != 0:
+        raise typer.Exit(rc)
 
 
 @docker_app.command("logs")
@@ -209,7 +279,9 @@ def docker_logs(follow: bool = typer.Option(False, "-f", "--follow")) -> None:
     args = ["logs"]
     if follow:
         args.append("-f")
-    _compose(*args)
+    rc = _compose(*args)
+    if rc != 0:
+        raise typer.Exit(rc)
 
 
 # Config subcommands

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import numpy as np
 import onnx
@@ -22,6 +22,25 @@ from onnx import TensorProto, compose, helper, numpy_helper, version_converter
 from onnx2oracle.presets import ModelSpec
 
 logger = logging.getLogger(__name__)
+
+
+def _external_data_locations(model: onnx.ModelProto) -> list[str]:
+    """Return external-data sidecar paths referenced by an ONNX model."""
+    locations: set[str] = set()
+    for tensor in model.graph.initializer:
+        if tensor.data_location != TensorProto.EXTERNAL:
+            continue
+        for entry in tensor.external_data:
+            if entry.key == "location" and entry.value:
+                locations.add(entry.value)
+    return sorted(locations)
+
+
+def _external_data_repo_path(location: str) -> str:
+    path = PurePosixPath(location)
+    if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
+        raise ValueError(f"Unsafe ONNX external data location: {location!r}")
+    return str(PurePosixPath("onnx") / path)
 
 
 def build_augmented(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
@@ -59,6 +78,14 @@ def build_augmented(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
             preprocessor=tokenizer_pt, model=model_pt, config=config, opset=14, output=core_path
         )
         core_path = str(core_path)
+    else:
+        # Some repos store large tensors beside model.onnx as external data.
+        # Probe without loading sidecars, then fetch the exact files referenced.
+        core_probe = onnx.load(core_path, load_external_data=False)
+        for location in _external_data_locations(core_probe):
+            repo_path = _external_data_repo_path(location)
+            logger.info("Downloading ONNX external data sidecar %s", repo_path)
+            hf_hub_download(spec.hf_repo, repo_path, **cache_kwargs)
 
     core_model = onnx.load(core_path)
 

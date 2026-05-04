@@ -139,6 +139,19 @@ SELECT * FROM user_tab_privs WHERE table_name = 'DBMS_VECTOR';</code></pre></li>
         depending on the model.</li>
     </ul>
 
+    <div class="callout">
+      <strong>Local evidence loop.</strong> In an <code>onnx2oracle</code> checkout, run
+      <code>scripts/run_real_db_integration.sh</code> when you need proof against a real Oracle 26ai
+      Free container. It starts Docker, records the database banner and image id, loads MiniLM,
+      verifies <code>VECTOR_EMBEDDING</code>, and runs the live integration test. Use
+      <code>ORACLE_PWD</code>, <code>ORACLE_PORT</code>, <code>ORACLE_IMAGE</code>, and
+      <code>ONNX2ORACLE_WAIT_TIMEOUT</code> to adapt the run without editing files.
+      Before loading manually, run <code>onnx2oracle preflight --target local</code> to check version,
+      package, SQL function, privilege, and catalog readiness.
+      To test a preset and write machine-readable evidence, run
+      <code>scripts/check_model_compatibility.py all-MiniLM-L6-v2</code>.
+    </div>
+
     <h2 id="model">Mental model of the task</h2>
     <p>The goal is a <strong>single self-contained ONNX graph</strong> whose input is a raw string
       and whose output is a normalized float32 vector. Oracle invokes the graph through

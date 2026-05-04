@@ -47,6 +47,7 @@
       <li><a href="#ora-01031"><span class="n">·</span>ORA-01031</a></li>
       <li><a href="#docker-timeout"><span class="n">·</span>Docker timeout</a></li>
       <li><a href="#hf-download-fails"><span class="n">·</span>HF download fails</a></li>
+      <li><a href="#onnx-sidecars"><span class="n">·</span>ONNX sidecars</a></li>
     </ol>
   </aside>
 
@@ -101,15 +102,17 @@ GRANT CREATE MINING MODEL TO app_user;</code></pre>
       <h2>Docker timeout on first startup</h2>
       <p>The Oracle Free image initializes the database on first run. That pulls seed data, runs startup scripts, opens tablespaces — allow three to five minutes on typical hardware.</p>
       <h3>What <code>--wait</code> does</h3>
-      <p><code>docker up --wait</code> polls the container's healthcheck at one-second intervals, up to ten minutes. It returns 0 when the healthcheck reports healthy, non-zero on timeout.</p>
-      <h3>If ten minutes isn't enough</h3>
+      <p><code>docker up --wait</code> starts the compose service, then runs a SQL readiness probe inside the container every five seconds until it succeeds or the timeout elapses. The default timeout is 600 seconds; override it with <code>--wait-timeout 1200</code> on slower Docker hosts.</p>
+      <h3>If the timeout isn't enough</h3>
       <pre><code>$ onnx2oracle docker logs
 <span class="c"># look for ORACLE_DBA or FATAL entries</span></code></pre>
       <p>Common causes:</p>
       <ul>
         <li>Docker host is memory-starved — Oracle Free needs ~4 GB during init.</li>
+        <li>Port 1521 is already allocated — set <code>ORACLE_PORT=1524</code> or another free host port before running <code>docker up</code>. The <code>--target local</code> shortcut uses the same variable.</li>
         <li>The volume from a previous half-initialized run is corrupt — <code>onnx2oracle docker down --volumes</code> nukes it and starts over.</li>
         <li>AArch64 host without emulation — the image is x86_64; enable Rosetta or qemu.</li>
+        <li>The Oracle registry image is unavailable in your environment — set <code>ORACLE_IMAGE=container-registry.oracle.com/database/free:latest-lite</code> or another compatible Oracle Free image before running <code>docker up</code>.</li>
       </ul>
     </section>
 
@@ -130,6 +133,15 @@ $ onnx2oracle load nomic-embed-text-v1</code></pre>
         <li>Run <code>onnx2oracle load</code> again — downloads resume from the cache and retry per-file.</li>
         <li>Set <code>HF_HUB_DOWNLOAD_TIMEOUT=120</code> for slower links.</li>
       </ul>
+    </section>
+
+    <section id="onnx-sidecars">
+      <h2>ONNX external-data sidecars</h2>
+      <p>Some HuggingFace ONNX exports keep large tensors outside <code>onnx/model.onnx</code> in sibling files such as <code>model.onnx_data</code>. The builder now inspects <code>model.onnx</code> without loading external data, downloads the referenced sidecars from the repo's <code>onnx/</code> folder, then loads the full model.</p>
+      <h3>If a sidecar download fails</h3>
+      <p>The HuggingFace repo may have moved or omitted an external data file. Rerun with a clean cache and keep the exact sidecar path from the log when filing an issue.</p>
+      <pre><code>$ rm -rf ~/.cache/huggingface/hub/models--your--model
+$ onnx2oracle load your-preset --target local</code></pre>
     </section>
 
     <hr>

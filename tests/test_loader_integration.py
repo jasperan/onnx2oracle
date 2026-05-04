@@ -4,8 +4,8 @@ Run with:
     pytest tests/test_loader_integration.py --run-integration -v -s
 
 Defaults to the credentials that `docker/docker-compose.yml` provisions
-(system/onnx2oracle@localhost:1521/FREEPDB1). To point at a different container
-set ORACLE_DSN in the environment:
+(system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1).
+To point at a different container set ORACLE_DSN in the environment:
 
     ORACLE_DSN='user/password@host:port/service' pytest ... --run-integration
 """
@@ -30,9 +30,9 @@ def _get_dsn() -> DSN:
     # Default matches docker/docker-compose.yml (local Oracle 26ai Free)
     return DSN(
         user="system",
-        password="onnx2oracle",
+        password=os.environ.get("ORACLE_PWD", "onnx2oracle"),
         host="localhost",
-        port=1521,
+        port=int(os.environ.get("ORACLE_PORT", "1521")),
         service="FREEPDB1",
     )
 

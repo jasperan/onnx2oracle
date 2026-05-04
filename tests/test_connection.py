@@ -34,12 +34,46 @@ def test_config_third(monkeypatch, tmp_path):
 
 def test_target_local_shortcut(monkeypatch, tmp_path):
     monkeypatch.delenv("ORACLE_DSN", raising=False)
+    monkeypatch.delenv("ORACLE_PWD", raising=False)
+    monkeypatch.delenv("ORACLE_PORT", raising=False)
     dsn = resolve_dsn(cli_dsn=None, target="local", config_path=tmp_path / "nope.toml")
     assert dsn.user == "system"
     assert dsn.password == "onnx2oracle"
     assert dsn.host == "localhost"
     assert dsn.port == 1521
     assert dsn.service == "FREEPDB1"
+
+
+def test_target_local_shortcut_honors_oracle_pwd(monkeypatch, tmp_path):
+    monkeypatch.delenv("ORACLE_DSN", raising=False)
+    monkeypatch.setenv("ORACLE_PWD", "custom-local-pw")
+
+    dsn = resolve_dsn(cli_dsn=None, target="local", config_path=tmp_path / "nope.toml")
+
+    assert dsn.user == "system"
+    assert dsn.password == "custom-local-pw"
+    assert dsn.host == "localhost"
+    assert dsn.port == 1521
+    assert dsn.service == "FREEPDB1"
+
+
+def test_target_local_shortcut_honors_oracle_port(monkeypatch, tmp_path):
+    monkeypatch.delenv("ORACLE_DSN", raising=False)
+    monkeypatch.setenv("ORACLE_PORT", "1524")
+
+    dsn = resolve_dsn(cli_dsn=None, target="local", config_path=tmp_path / "nope.toml")
+
+    assert dsn.host == "localhost"
+    assert dsn.port == 1524
+    assert dsn.service == "FREEPDB1"
+
+
+def test_target_local_shortcut_rejects_invalid_oracle_port(monkeypatch, tmp_path):
+    monkeypatch.delenv("ORACLE_DSN", raising=False)
+    monkeypatch.setenv("ORACLE_PORT", "not-a-port")
+
+    with pytest.raises(ValueError, match="ORACLE_PORT must be an integer"):
+        resolve_dsn(cli_dsn=None, target="local", config_path=tmp_path / "nope.toml")
 
 
 def test_no_source_raises(monkeypatch, tmp_path):

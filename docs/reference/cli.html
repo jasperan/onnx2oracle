@@ -44,6 +44,7 @@
     <ol>
       <li><a href="#info"><span class="n">·</span>Info commands</a></li>
       <li><a href="#load"><span class="n">·</span>load</a></li>
+      <li><a href="#preflight"><span class="n">·</span>preflight</a></li>
       <li><a href="#verify"><span class="n">·</span>verify</a></li>
       <li><a href="#docker"><span class="n">·</span>docker</a></li>
       <li><a href="#config"><span class="n">·</span>config</a></li>
@@ -59,7 +60,7 @@
     <h2 id="info">Info commands</h2>
     <pre><code>onnx2oracle version
 onnx2oracle presets</code></pre>
-    <p><code>version</code> prints the package version and the ONNX opset it emits. <code>presets</code> prints the six registered models with their Oracle names, HF repos, and dimensions.</p>
+    <p><code>version</code> prints the package version. <code>presets</code> prints the five registered models with their Oracle names, HF repos, and dimensions.</p>
 
     <h2 id="load">load</h2>
     <p>The primary command. Two shapes — preset or HuggingFace repo.</p>
@@ -75,9 +76,9 @@ onnx2oracle load --from-huggingface &lt;hf/repo&gt; --pooling {mean,cls}
     <table>
       <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td class="mono">&lt;preset&gt;</td><td>One of the six registered names. <code>onnx2oracle presets</code> shows the list.</td></tr>
+        <tr><td class="mono">&lt;preset&gt;</td><td>One of the five registered names. <code>onnx2oracle presets</code> shows the list.</td></tr>
         <tr><td class="mono">--from-huggingface</td><td>Alternative to preset. Fully-qualified HF repo (e.g. <code>BAAI/bge-large-en-v1.5</code>).</td></tr>
-        <tr><td class="mono">--target local</td><td>Use the local Docker DSN <code>system/onnx2oracle@localhost:1521/FREEPDB1</code>.</td></tr>
+        <tr><td class="mono">--target local</td><td>Use the local Docker DSN <code>system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1</code>.</td></tr>
         <tr><td class="mono">--dsn</td><td>Explicit connection string. See <a href="#dsn">DSN resolution</a>.</td></tr>
         <tr><td class="mono">--force</td><td>Drop and reload if the model name already exists in <code>user_mining_models</code>.</td></tr>
         <tr><td class="mono">--name</td><td>Override the Oracle mining-model identifier. Required for <code>--from-huggingface</code>.</td></tr>
@@ -88,6 +89,11 @@ onnx2oracle load --from-huggingface &lt;hf/repo&gt; --pooling {mean,cls}
         <tr><td class="mono">--dims</td><td>Asserted output dimension. Custom loads only.</td></tr>
       </tbody>
     </table>
+
+    <h2 id="preflight">preflight</h2>
+    <pre><code>onnx2oracle preflight [--target local | --dsn ...]</code></pre>
+    <p>Checks the database before a model upload. It connects, prints the database banner, confirms <code>SYS.DBMS_VECTOR</code> is valid, confirms the SQL function catalog includes <code>VECTOR_EMBEDDING</code>, checks mining-model privileges, checks <code>EXECUTE</code> access to <code>DBMS_VECTOR</code>, and confirms <code>user_mining_models</code> is visible.</p>
+    <p>Exit code 0 means the target is ready for <code>DBMS_VECTOR.LOAD_ONNX_MODEL</code>. Non-zero output names the missing package, function, privilege, or catalog view.</p>
 
     <h2 id="verify">verify</h2>
     <pre><code>onnx2oracle verify [--target local | --dsn ...] [--name ORACLE_NAME]</code></pre>
@@ -100,10 +106,11 @@ onnx2oracle load --from-huggingface &lt;hf/repo&gt; --pooling {mean,cls}
     <p>Exit code 0 on success, non-zero otherwise.</p>
 
     <h2 id="docker">docker</h2>
-    <pre><code>onnx2oracle docker up [--wait]
-onnx2oracle docker down
+    <pre><code>onnx2oracle docker up [--wait] [--wait-timeout 600] [--wait-interval 5]
+onnx2oracle docker down [--volumes]
 onnx2oracle docker logs [-f]</code></pre>
-    <p>Thin wrapper around <code>docker compose</code> pointed at the bundled compose file. <code>up --wait</code> polls the container's healthcheck until it reports healthy or 10 minutes elapses — see <a href="troubleshooting.html#docker-timeout">#docker-timeout</a>.</p>
+    <p>Thin wrapper around <code>docker compose</code> pointed at the bundled compose file. <code>up --wait</code> runs a SQL readiness probe inside the container until it succeeds or <code>--wait-timeout</code> elapses — see <a href="troubleshooting.html#docker-timeout">#docker-timeout</a>.</p>
+    <p>The bundled compose file honors <code>ORACLE_PWD</code>, <code>ORACLE_PORT</code>, and <code>ORACLE_IMAGE</code>. Use <code>ORACLE_PORT=1524</code> when 1521 is already occupied, or <code>ORACLE_IMAGE=container-registry.oracle.com/database/free:latest-lite</code> to try the smaller Oracle Free image without editing YAML.</p>
     <p><code>logs -f</code> tails Oracle's alert log. Useful when the container comes up but something inside the database doesn't.</p>
 
     <h2 id="config">config</h2>
@@ -111,7 +118,7 @@ onnx2oracle docker logs [-f]</code></pre>
 onnx2oracle config set key=value</code></pre>
     <p><code>show</code> dumps the effective TOML at <code>~/.onnx2oracle/config.toml</code>. <code>set</code> writes a single key. Typical keys:</p>
     <ul>
-      <li><code>default_dsn</code> — persistent DSN, wins over <code>--target local</code> but loses to <code>--dsn</code> and <code>ORACLE_DSN</code>.</li>
+      <li><code>dsn</code> — persistent DSN in the <code>[default]</code> table; wins over <code>--target local</code> but loses to <code>--dsn</code> and <code>ORACLE_DSN</code>.</li>
       <li><code>cache_dir</code> — override <code>~/.onnx2oracle/cache</code>.</li>
       <li><code>hf_token</code> — persisted HuggingFace token (prefer <code>HF_TOKEN</code> env if you don't want it on disk).</li>
     </ul>
@@ -123,8 +130,8 @@ onnx2oracle config set key=value</code></pre>
       <tbody>
         <tr><td class="mono">1</td><td><code>--dsn</code> flag</td><td class="mono">--dsn admin/pw@...</td></tr>
         <tr><td class="mono">2</td><td><code>ORACLE_DSN</code> env var</td><td class="mono">export ORACLE_DSN=...</td></tr>
-        <tr><td class="mono">3</td><td><code>~/.onnx2oracle/config.toml</code> <code>default_dsn</code></td><td class="mono">config set default_dsn=...</td></tr>
-        <tr><td class="mono">4</td><td><code>--target local</code></td><td class="mono">system/onnx2oracle@localhost:1521/FREEPDB1</td></tr>
+        <tr><td class="mono">3</td><td><code>~/.onnx2oracle/config.toml</code> <code>dsn</code> in <code>[default]</code></td><td class="mono">config set dsn=...</td></tr>
+        <tr><td class="mono">4</td><td><code>--target local</code></td><td class="mono">system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1</td></tr>
         <tr><td class="mono">5</td><td>Interactive prompt</td><td class="mono">CLI asks stdin</td></tr>
       </tbody>
     </table>

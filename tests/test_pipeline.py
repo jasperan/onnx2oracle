@@ -8,9 +8,36 @@ Run with: pytest tests/test_pipeline.py -v -m slow
 
 import onnx
 import pytest
+from onnx import TensorProto, helper
 
-from onnx2oracle.pipeline import build_augmented
+from onnx2oracle.pipeline import _external_data_locations, _external_data_repo_path, build_augmented
 from onnx2oracle.presets import get_preset
+
+
+def test_external_data_locations_reads_onnx_sidecar_metadata():
+    tensor = TensorProto()
+    tensor.name = "weights"
+    tensor.data_type = TensorProto.FLOAT
+    tensor.dims.extend([1])
+    tensor.data_location = TensorProto.EXTERNAL
+    entry = tensor.external_data.add()
+    entry.key = "location"
+    entry.value = "model.onnx_data"
+    graph = helper.make_graph(nodes=[], name="g", inputs=[], outputs=[], initializer=[tensor])
+    model = helper.make_model(graph)
+
+    assert _external_data_locations(model) == ["model.onnx_data"]
+
+
+def test_external_data_repo_path_is_relative_to_onnx_dir():
+    assert _external_data_repo_path("model.onnx_data") == "onnx/model.onnx_data"
+    assert _external_data_repo_path("shards/model_00001.bin") == "onnx/shards/model_00001.bin"
+
+
+@pytest.mark.parametrize("location", ["../secret", "/tmp/model.bin", ".", ""])
+def test_external_data_repo_path_rejects_unsafe_locations(location):
+    with pytest.raises(ValueError, match="Unsafe ONNX external data location"):
+        _external_data_repo_path(location)
 
 
 @pytest.mark.slow

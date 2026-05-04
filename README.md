@@ -82,15 +82,22 @@ pip install onnx2oracle
 onnx2oracle docker up --wait
 ```
 
-First start is slow (3-5 min while the PDB opens). Subsequent starts are ~30 seconds.
+First start is slow (3-5 min while the PDB opens). Subsequent starts are ~30 seconds. The wait is a
+bounded SQL probe; override it with `--wait-timeout SECONDS` if your Docker host is slow.
 
-### 3. Load a model
+### 3. Preflight the DB
+
+```bash
+onnx2oracle preflight --target local
+```
+
+### 4. Load a model
 
 ```bash
 onnx2oracle load all-MiniLM-L6-v2 --target local
 ```
 
-### 4. Verify
+### 5. Verify
 
 ```bash
 onnx2oracle verify --target local
@@ -100,7 +107,7 @@ onnx2oracle verify --target local
 # ✓ Similarity sanity (king/queen > king/banana)
 ```
 
-### 5. Query
+### 6. Query
 
 ```sql
 SELECT VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING 'hello world' AS DATA) AS v
@@ -109,8 +116,10 @@ FROM dual;
 
 ## Presets
 
-All 5 presets verified end-to-end against a live Oracle 26ai Free container.
+Five curated presets are included. Use `scripts/check_model_compatibility.py --all-presets` to
+refresh real-DB pass/fail evidence in your environment.
 
+<!-- BEGIN: preset-table -->
 | Preset | HuggingFace repo | Dims | Size (FP32) | Pooling | Oracle name |
 |---|---|---|---|---|---|
 | `all-MiniLM-L6-v2` | sentence-transformers/all-MiniLM-L6-v2 | 384 | ~90 MB | mean | `ALL_MINILM_L6_V2` |
@@ -118,6 +127,7 @@ All 5 presets verified end-to-end against a live Oracle 26ai Free container.
 | `all-mpnet-base-v2` | sentence-transformers/all-mpnet-base-v2 | 768 | ~420 MB | mean | `ALL_MPNET_BASE_V2` |
 | `bge-small-en-v1.5` | BAAI/bge-small-en-v1.5 | 384 | ~130 MB | cls | `BGE_SMALL_EN_V1_5` |
 | `nomic-embed-text-v1` | nomic-ai/nomic-embed-text-v1 | 768 | ~540 MB | mean | `NOMIC_EMBED_TEXT_V1` |
+<!-- END: preset-table -->
 
 Any sentence-transformer-style model also works via `--from-huggingface`:
 
@@ -133,14 +143,15 @@ onnx2oracle load --from-huggingface BAAI/bge-base-en-v1.5 \
 ```
 onnx2oracle version
 onnx2oracle presets                    # List the 5 curated presets
-onnx2oracle docker up [--wait]         # Start Oracle 26ai Free container
-onnx2oracle docker down                # Stop + remove container
+onnx2oracle docker up [--wait] [--wait-timeout 600] [--wait-interval 5]
+onnx2oracle docker down [--volumes]    # Stop + remove container, optionally remove DB volume
 onnx2oracle docker logs [-f]           # Tail container logs
 
 onnx2oracle load <preset> [--target local | --dsn ...] [--force]
 onnx2oracle load --from-huggingface <repo> --pooling {mean,cls} \
                  --dims N --name ORACLE_NAME [--target local | --dsn ...]
 
+onnx2oracle preflight [--target local | --dsn ...]
 onnx2oracle verify [--target local | --dsn ...] [--name ORACLE_NAME]
 
 onnx2oracle config show
@@ -154,7 +165,7 @@ Connections resolve in this order:
 1. `--dsn user/pw@host:port/service` flag
 2. `ORACLE_DSN` env var
 3. `~/.onnx2oracle/config.toml` (`[default] dsn = "..."`)
-4. `--target local` shortcut (`system/onnx2oracle@localhost:1521/FREEPDB1`)
+4. `--target local` shortcut (`system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1`)
 5. Interactive prompt (password masked)
 
 If none of the above are set, the CLI auto-defaults to `--target local` for a painless docker-compose workflow.
@@ -164,7 +175,9 @@ If none of the above are set, the CLI auto-defaults to `--target local` for a pa
 | Variable | Description | Default |
 |---|---|---|
 | `ORACLE_DSN` | Full DSN: `user/password@host:port/service` | — |
-| `ORACLE_PWD` | Password for the docker-compose container | `onnx2oracle` |
+| `ORACLE_PWD` | Password for the docker-compose container and `--target local` | `onnx2oracle` |
+| `ORACLE_PORT` | Host port for the local Docker listener and `--target local` | `1521` |
+| `ORACLE_IMAGE` | Docker image used by the bundled compose file | `container-registry.oracle.com/database/free:latest` |
 | `HF_HOME` | HuggingFace cache directory | `~/.cache/huggingface` |
 | `HF_TOKEN` | HuggingFace API token (for gated models) | — |
 
@@ -206,7 +219,19 @@ pytest tests/test_pipeline.py -v -m slow
 # Integration test against a live Oracle 26ai Free container:
 ORACLE_DSN='system/yourpw@localhost:1521/FREEPDB1' \
   pytest tests/test_loader_integration.py --run-integration -v
+
+# One-command local evidence run: start Oracle, record DB evidence, load MiniLM,
+# verify VECTOR_EMBEDDING, and run the live integration test.
+scripts/run_real_db_integration.sh
+
+# Model compatibility evidence: build, load, verify, clean up, and write JSONL.
+ORACLE_PORT=1524 scripts/check_model_compatibility.py all-MiniLM-L6-v2
 ```
+
+The evidence runner writes logs under `integration-artifacts/`. Set `ORACLE_PORT=1524` if 1521 is
+already occupied, `ORACLE_IMAGE` to switch images, `ONNX2ORACLE_WAIT_TIMEOUT=1200` for slower first
+starts, and `ONNX2ORACLE_CLEANUP=down` or `ONNX2ORACLE_CLEANUP=volumes` when you want the script to
+stop or remove the database after the run.
 
 ## Security
 

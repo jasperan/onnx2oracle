@@ -22,6 +22,7 @@ venv/
 .claude/
 .crush/
 .omc/
+.omx/
 .openhands/
 .serena/
 
@@ -32,6 +33,7 @@ findings.md
 progress.md
 dogfood-output/
 .playwright-mcp/
+integration-artifacts/
 
 # Model artifacts (too large)
 *.onnx

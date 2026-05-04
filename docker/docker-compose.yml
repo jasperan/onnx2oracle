@@ -1,9 +1,9 @@
 services:
   oracle:
-    image: container-registry.oracle.com/database/free:latest
+    image: ${ORACLE_IMAGE:-container-registry.oracle.com/database/free:latest}
     container_name: onnx2oracle-oracle
     ports:
-      - "1521:1521"
+      - "${ORACLE_PORT:-1521}:1521"
     environment:
       ORACLE_PWD: ${ORACLE_PWD:-onnx2oracle}
     volumes:

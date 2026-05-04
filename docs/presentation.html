@@ -1457,8 +1457,8 @@ merged = compose.<span class="f">merge_models</span>(
 
   <!-- ============ SLIDE 14: FIVE PRESETS ============ -->
   <section class="slide slide--presets" id="slide-14">
-    <div class="reveal"><span class="eyebrow">Five vetted presets</span></div>
-    <h2 class="heading reveal">Every preset is verified against a live Oracle 26ai Free container.</h2>
+    <div class="reveal"><span class="eyebrow">Five curated presets</span></div>
+    <h2 class="heading reveal">Every preset has enough metadata to run a real Oracle compatibility check.</h2>
     <div class="preset-grid">
       <div class="preset reveal">
         <span class="preset-name">all-MiniLM-L6-v2</span>
@@ -1468,7 +1468,7 @@ merged = compose.<span class="f">merge_models</span>(
           <span>~90 MB</span>
           <span>ENGLISH</span>
         </div>
-        <span class="preset-verified">Verified</span>
+        <span class="preset-verified">Runnable</span>
       </div>
       <div class="preset reveal">
         <span class="preset-name">all-MiniLM-L12-v2</span>
@@ -1478,7 +1478,7 @@ merged = compose.<span class="f">merge_models</span>(
           <span>~130 MB</span>
           <span>DEEPER</span>
         </div>
-        <span class="preset-verified">Verified</span>
+        <span class="preset-verified">Runnable</span>
       </div>
       <div class="preset reveal">
         <span class="preset-name">all-mpnet-base-v2</span>
@@ -1488,7 +1488,7 @@ merged = compose.<span class="f">merge_models</span>(
           <span>~420 MB</span>
           <span>QUALITY</span>
         </div>
-        <span class="preset-verified">Verified</span>
+        <span class="preset-verified">Runnable</span>
       </div>
       <div class="preset reveal">
         <span class="preset-name">bge-small-en-v1.5</span>
@@ -1498,7 +1498,7 @@ merged = compose.<span class="f">merge_models</span>(
           <span>~130 MB</span>
           <span>BEIR-STRONG</span>
         </div>
-        <span class="preset-verified">Verified</span>
+        <span class="preset-verified">Runnable</span>
       </div>
       <div class="preset reveal">
         <span class="preset-name">nomic-embed-text-v1</span>
@@ -1508,11 +1508,11 @@ merged = compose.<span class="f">merge_models</span>(
           <span>~540 MB</span>
           <span>LONG-CTX</span>
         </div>
-        <span class="preset-verified">Verified</span>
+        <span class="preset-verified">Runnable</span>
       </div>
     </div>
     <p class="presets-cap reveal">
-      Each preset maps a HuggingFace repo to an Oracle mining-model name and hardcodes the correct pooling strategy. End-to-end tests spin up a real container, load the model, embed a sentence, and assert a 384-d or 768-d unit vector.
+      Each preset maps a HuggingFace repo to an Oracle mining-model name and hardcodes the expected pooling strategy. The compatibility runner can build, load, verify, clean up, and record JSONL evidence against a real container.
     </p>
   </section>
 

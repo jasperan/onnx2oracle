@@ -15,6 +15,8 @@ else:
     import tomli as tomllib
 
 DEFAULT_CONFIG_PATH = Path.home() / ".onnx2oracle" / "config.toml"
+DEFAULT_LOCAL_PASSWORD = "onnx2oracle"
+DEFAULT_LOCAL_PORT = 1521
 
 
 @dataclass(frozen=True)
@@ -59,11 +61,17 @@ class DSN:
 
 
 def _local_dsn() -> DSN:
+    raw_port = os.environ.get("ORACLE_PORT", str(DEFAULT_LOCAL_PORT))
+    try:
+        port = int(raw_port)
+    except ValueError as exc:
+        raise ValueError(f"ORACLE_PORT must be an integer, got {raw_port!r}") from exc
+
     return DSN(
         user="system",
-        password="onnx2oracle",
+        password=os.environ.get("ORACLE_PWD", DEFAULT_LOCAL_PASSWORD),
         host="localhost",
-        port=1521,
+        port=port,
         service="FREEPDB1",
     )
 

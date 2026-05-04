@@ -25,13 +25,15 @@ A single self-contained ONNX graph whose input is a raw string and whose output 
 
 WordPiece tokenizers (BERT, MiniLM, MPNet, BGE) work. SentencePiece and Unigram tokenizers (XLM-R, LLaMA, T5, e5) don't: `gen_processing_models` produces ragged outputs Oracle's BertTokenizer op can't consume. For multilingual use cases, pick a WordPiece alternative like `microsoft/Multilingual-MiniLM-L12-H384`.
 
-## Known-working models
+## Curated presets
 
 - sentence-transformers/all-MiniLM-L6-v2: 384 dims, ~90 MB, mean pool
 - sentence-transformers/all-MiniLM-L12-v2: 384 dims, ~130 MB, mean pool
 - sentence-transformers/all-mpnet-base-v2: 768 dims, ~420 MB, mean pool
 - BAAI/bge-small-en-v1.5: 384 dims, ~130 MB, CLS pool
 - nomic-ai/nomic-embed-text-v1: 768 dims, ~540 MB, mean pool
+
+Refresh real Oracle pass/fail evidence with `scripts/check_model_compatibility.py --all-presets`.
 
 ## Query once loaded
 
@@ -55,6 +57,35 @@ VALUES (1, :text, VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING :text AS DATA));
 
 Dimension must match the model: 384 for MiniLM and BGE-small, 768 for MPNet and Nomic.
 
+## Local Oracle 26ai Free container
+
+Start the bundled container and wait for SQL readiness:
+
+```
+onnx2oracle docker up --wait --wait-timeout 900
+```
+
+Check database readiness before loading:
+
+```
+onnx2oracle preflight --target local
+```
+
+The bundled compose file uses `container-registry.oracle.com/database/free:latest` by default.
+Set `ORACLE_IMAGE=container-registry.oracle.com/database/free:latest-lite` to try the smaller Oracle
+Free image without editing YAML. Set `ORACLE_PWD` before first startup to change the local SYSTEM
+password. Set `ORACLE_PORT=1524` if 1521 is already occupied. `--target local` resolves to
+`system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1`.
+
+For evidence, run from a git checkout:
+
+```
+scripts/run_real_db_integration.sh
+```
+
+That starts Oracle, records the DB banner and container image id, loads `all-MiniLM-L6-v2`, verifies
+`VECTOR_EMBEDDING`, and runs `pytest tests/test_loader_integration.py --run-integration -v -s`.
+
 ## Security
 
 `VECTOR_EMBEDDING` takes the model name as a SQL token, not a bind variable. Validate any model-name string against `^[A-Z_][A-Z0-9_]{0,127}$` before f-string interpolation. All other values go through bind variables.
@@ -65,6 +96,7 @@ Dimension must match the model: 384 for MiniLM and BGE-small, 768 for MPNet and 
 - ORA-20000: opset mismatch (rebuild with onnx>=1.16, opset 18), or the metadata input tensor name doesn't match the graph (should be `pre_text` when using `prefix1="pre_"`).
 - ORA-01031: Grant `EXECUTE ON DBMS_VECTOR` and `CREATE MINING MODEL` as SYSDBA.
 - BertTokenizer errors: the tokenizer is SentencePiece. Swap to a WordPiece model.
+- Missing ONNX sidecar data: the builder inspects `onnx/model.onnx` for external-data references and downloads those files from the repo's `onnx/` folder before loading the graph.
 - Cold-start slowness: Oracle compiles the ONNX on first call per session. Expect 100 to 500 ms once, then under 20 ms.
 
 ## Docs

@@ -68,6 +68,7 @@ ignore = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 markers = [
   "integration: requires a running Oracle 26ai Free container",
   "slow: slow tests (HF downloads), skip with `-m 'not slow'`",
