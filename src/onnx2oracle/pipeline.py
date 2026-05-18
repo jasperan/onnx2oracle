@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import logging
 import tempfile
+from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
+from typing import Any, cast
 
 import numpy as np
 import onnx
@@ -43,6 +45,63 @@ def _external_data_repo_path(location: str) -> str:
     return str(PurePosixPath("onnx") / path)
 
 
+def _require_torch_for_export_fallback() -> None:
+    if find_spec("torch") is None:
+        raise RuntimeError(
+            "This HuggingFace repository does not provide onnx/model.onnx, so onnx2oracle "
+            "must export the transformer from PyTorch. Install the optional export extra "
+            'with `pip install "onnx2oracle[export]"`, then retry.'
+        )
+
+
+def _should_use_export_fallback(exc: Exception) -> bool:
+    from huggingface_hub.errors import EntryNotFoundError, LocalEntryNotFoundError
+
+    return isinstance(exc, EntryNotFoundError) and not isinstance(exc, LocalEntryNotFoundError)
+
+
+def _truncate_and_unsqueeze_tokenizer_outputs(
+    pre_model: onnx.ModelProto,
+    names: list[str],
+    max_length: int,
+) -> None:
+    """Truncate 1-D tokenizer outputs, then add the transformer batch dimension."""
+    if max_length < 1:
+        raise ValueError(f"max_length must be >= 1, got {max_length}")
+
+    slice_starts = numpy_helper.from_array(np.array([0], dtype=np.int64), name="truncate_starts")
+    slice_ends = numpy_helper.from_array(np.array([max_length], dtype=np.int64), name="truncate_ends")
+    slice_axes = numpy_helper.from_array(np.array([0], dtype=np.int64), name="truncate_axes")
+    slice_steps = numpy_helper.from_array(np.array([1], dtype=np.int64), name="truncate_steps")
+    axes_0 = numpy_helper.from_array(np.array([0], dtype=np.int64), name="unsqueeze_axes_0")
+    pre_model.graph.initializer.extend([slice_starts, slice_ends, slice_axes, slice_steps, axes_0])
+
+    for name in names:
+        raw_name = f"{name}_raw"
+        flat_name = f"{name}_flat"
+        for node in pre_model.graph.node:
+            for i, out in enumerate(node.output):
+                if out == name:
+                    node.output[i] = raw_name
+        pre_model.graph.node.append(
+            helper.make_node(
+                "Slice",
+                [raw_name, "truncate_starts", "truncate_ends", "truncate_axes", "truncate_steps"],
+                [flat_name],
+            )
+        )
+        pre_model.graph.node.append(
+            helper.make_node("Unsqueeze", [flat_name, "unsqueeze_axes_0"], [name])
+        )
+        for out in pre_model.graph.output:
+            if out.name == name:
+                shape = out.type.tensor_type.shape
+                while len(shape.dim) > 0:
+                    shape.dim.pop()
+                shape.dim.add().dim_value = 1
+                shape.dim.add().dim_param = "sequence_length"
+
+
 def build_augmented(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
     """Build the augmented ONNX pipeline for *spec* and return it as bytes.
 
@@ -52,17 +111,20 @@ def build_augmented(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
     from onnxruntime_extensions import gen_processing_models
     from transformers import AutoTokenizer
 
-    cache_kwargs: dict[str, str] = {}
+    cache_kwargs: dict[str, Any] = {}
     if cache_dir is not None:
         cache_kwargs["cache_dir"] = str(cache_dir)
 
     # 1) Download core transformer ONNX (prefer pre-exported onnx/model.onnx)
     try:
         core_path = hf_hub_download(spec.hf_repo, "onnx/model.onnx", **cache_kwargs)
-    except Exception:
+    except Exception as exc:
+        if not _should_use_export_fallback(exc):
+            raise
+        _require_torch_for_export_fallback()
         # Fallback: export from PyTorch (slower but universal)
         from transformers import AutoModel
-        from transformers.onnx import export as hf_onnx_export
+        from transformers.onnx.convert import export as hf_onnx_export
         from transformers.onnx.features import FeaturesManager
 
         snap = Path(snapshot_download(spec.hf_repo, **cache_kwargs))
@@ -98,9 +160,10 @@ def build_augmented(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
     # core transformer expects.
     tokenizer = AutoTokenizer.from_pretrained(spec.hf_repo, **cache_kwargs)
     try:
-        pre_model, _ = gen_processing_models(
-            tokenizer, pre_kwargs={}, post_kwargs=None, opset=14
+        pre_model_raw, _ = gen_processing_models(
+            tokenizer, pre_kwargs={}, post_kwargs=cast(Any, None), opset=14
         )
+        pre_model = cast(onnx.ModelProto, pre_model_raw)
         pre_output_names = {o.name for o in pre_model.graph.output}
         if "input_ids" not in pre_output_names:
             raise ValueError(
@@ -125,9 +188,10 @@ def build_augmented(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
                 f"BertTokenizer ONNX graph compatible with Oracle's DBMS_VECTOR. "
                 f"Use a model with a WordPiece vocabulary (BertTokenizer family)."
             ) from None
-        pre_model, _ = gen_processing_models(
-            tokenizer, pre_kwargs={}, post_kwargs=None, opset=14
+        pre_model_raw, _ = gen_processing_models(
+            tokenizer, pre_kwargs={}, post_kwargs=cast(Any, None), opset=14
         )
+        pre_model = cast(onnx.ModelProto, pre_model_raw)
 
     # 3) Align opsets — bump core to 18 + copy custom domains from pre
     core_model = version_converter.convert_version(core_model, 18)
@@ -148,25 +212,7 @@ def build_augmented(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
     bert_tensor_names = [n for n in ("input_ids", "token_type_ids", "attention_mask")
                          if n in pre_output_names]
 
-    axes_0 = numpy_helper.from_array(np.array([0], dtype=np.int64), name="unsqueeze_axes_0")
-    pre_model.graph.initializer.append(axes_0)
-
-    for name in bert_tensor_names:
-        flat_name = f"{name}_flat"
-        for node in pre_model.graph.node:
-            for i, out in enumerate(node.output):
-                if out == name:
-                    node.output[i] = flat_name
-        pre_model.graph.node.append(
-            helper.make_node("Unsqueeze", [flat_name, "unsqueeze_axes_0"], [name])
-        )
-        for out in pre_model.graph.output:
-            if out.name == name:
-                shape = out.type.tensor_type.shape
-                while len(shape.dim) > 0:
-                    shape.dim.pop()
-                shape.dim.add().dim_value = 1
-                shape.dim.add().dim_param = "sequence_length"
+    _truncate_and_unsqueeze_tokenizer_outputs(pre_model, bert_tensor_names, spec.max_length)
 
     # 5) Merge pre + core — only connect tensors present in both graphs
     io_map = [

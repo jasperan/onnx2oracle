@@ -2,6 +2,7 @@ from typer.testing import CliRunner
 
 import onnx2oracle.cli as cli
 from onnx2oracle.preflight import PreflightCheck, PreflightResult
+from onnx2oracle.verify import VerifyResult
 
 runner = CliRunner()
 
@@ -62,6 +63,25 @@ def test_preflight_command_fails_when_a_check_fails(monkeypatch):
 
     assert result.exit_code == 1
     assert "not found" in result.stdout
+
+
+def test_verify_command_fails_when_similarity_sanity_fails(monkeypatch):
+    def fake_smoke_test(_dsn, _model_name):
+        return VerifyResult(
+            connected=True,
+            model_registered=True,
+            sample_embedding_dims=384,
+            sample_embedding_norm=1.0,
+            similarity_sane=False,
+            elapsed_ms=12,
+        )
+
+    monkeypatch.setattr(cli, "smoke_test", fake_smoke_test)
+
+    result = runner.invoke(cli.app, ["verify", "--dsn", "system/pw@localhost:1521/FREEPDB1"])
+
+    assert result.exit_code == 1
+    assert "Similarity sanity" in result.stdout
 
 
 def test_docker_up_no_wait_only_starts_compose(monkeypatch):

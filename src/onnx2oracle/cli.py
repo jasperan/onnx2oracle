@@ -91,6 +91,7 @@ def load(
     if preset:
         spec = get_preset(preset)
     else:
+        assert from_huggingface is not None
         if dims is None:
             console.print("[red]--dims is required with --from-huggingface[/red]")
             raise typer.Exit(2)
@@ -199,6 +200,13 @@ def verify(
     console.print(f"[dim]Elapsed: {result.elapsed_ms} ms[/dim]")
     if result.error:
         console.print(f"[red]Error:[/red] {result.error}")
+    if (
+        result.error
+        or not result.connected
+        or not result.model_registered
+        or result.sample_embedding_dims is None
+        or not result.similarity_sane
+    ):
         raise typer.Exit(1)
 
 

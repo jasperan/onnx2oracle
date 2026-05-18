@@ -8,9 +8,17 @@ Run with: pytest tests/test_pipeline.py -v -m slow
 
 import onnx
 import pytest
-from onnx import TensorProto, helper
+from onnx import TensorProto, helper, numpy_helper
 
-from onnx2oracle.pipeline import _external_data_locations, _external_data_repo_path, build_augmented
+import onnx2oracle.pipeline as pipeline
+from onnx2oracle.pipeline import (
+    _external_data_locations,
+    _external_data_repo_path,
+    _require_torch_for_export_fallback,
+    _should_use_export_fallback,
+    _truncate_and_unsqueeze_tokenizer_outputs,
+    build_augmented,
+)
 from onnx2oracle.presets import get_preset
 
 
@@ -38,6 +46,50 @@ def test_external_data_repo_path_is_relative_to_onnx_dir():
 def test_external_data_repo_path_rejects_unsafe_locations(location):
     with pytest.raises(ValueError, match="Unsafe ONNX external data location"):
         _external_data_repo_path(location)
+
+
+def test_truncate_and_unsqueeze_tokenizer_outputs_adds_slice_before_batch_dim():
+    graph = helper.make_graph(
+        nodes=[helper.make_node("Identity", ["source_ids"], ["input_ids"])],
+        name="g",
+        inputs=[helper.make_tensor_value_info("source_ids", TensorProto.INT64, [None])],
+        outputs=[helper.make_tensor_value_info("input_ids", TensorProto.INT64, [None])],
+    )
+    model = helper.make_model(graph)
+
+    _truncate_and_unsqueeze_tokenizer_outputs(model, ["input_ids"], max_length=7)
+
+    nodes = list(model.graph.node)
+    assert [node.op_type for node in nodes] == ["Identity", "Slice", "Unsqueeze"]
+    assert nodes[0].output == ["input_ids_raw"]
+    assert nodes[1].input == ["input_ids_raw", "truncate_starts", "truncate_ends", "truncate_axes", "truncate_steps"]
+    assert nodes[1].output == ["input_ids_flat"]
+    assert nodes[2].input == ["input_ids_flat", "unsqueeze_axes_0"]
+    assert nodes[2].output == ["input_ids"]
+
+    initializers = {
+        initializer.name: numpy_helper.to_array(initializer).tolist() for initializer in model.graph.initializer
+    }
+    assert initializers["truncate_ends"] == [7]
+
+    dims = model.graph.output[0].type.tensor_type.shape.dim
+    assert dims[0].dim_value == 1
+    assert dims[1].dim_param == "sequence_length"
+
+
+def test_export_fallback_requires_torch_extra_when_torch_is_missing(monkeypatch):
+    monkeypatch.setattr(pipeline, "find_spec", lambda name: None if name == "torch" else object())
+
+    with pytest.raises(RuntimeError, match=r'onnx2oracle\[export\]'):
+        _require_torch_for_export_fallback()
+
+
+def test_export_fallback_only_handles_missing_hub_entry():
+    from huggingface_hub.errors import EntryNotFoundError, LocalEntryNotFoundError, RepositoryNotFoundError
+
+    assert _should_use_export_fallback(EntryNotFoundError("missing model.onnx"))
+    assert not _should_use_export_fallback(LocalEntryNotFoundError("offline cache miss"))
+    assert not _should_use_export_fallback(RepositoryNotFoundError("private or missing repo"))
 
 
 @pytest.mark.slow
@@ -76,6 +128,8 @@ def test_build_augmented_runs_end_to_end_on_cpu():
     input_name = "pre_text"
 
     out = sess.run(None, {input_name: np.array(["hello world"])})[0]
-    assert out.shape == (384,)
-    norm = float(np.linalg.norm(out))
+    assert isinstance(out, np.ndarray)
+    out_array = out
+    assert out_array.shape == (384,)
+    norm = float(np.linalg.norm(out_array))
     assert 0.99 < norm < 1.01, f"expected L2 norm ~1.0, got {norm}"

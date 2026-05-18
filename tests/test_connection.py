@@ -87,3 +87,25 @@ def test_parse_with_special_chars_in_password():
     assert dsn.user == "system"
     assert dsn.password == "oracle@123!"
     assert dsn.host == "localhost"
+
+
+def test_parse_tns_alias_passes_connect_string_through():
+    dsn = DSN.parse("admin/oracle@123!@mydb_high")
+
+    assert dsn.user == "admin"
+    assert dsn.password == "oracle@123!"
+    assert dsn.to_oracle_dsn() == "mydb_high"
+    assert dsn.display() == "admin@mydb_high"
+
+
+def test_parse_adb_descriptor_passes_connect_string_through():
+    descriptor = (
+        "(description=(address=(protocol=tcps)(port=1522)(host=adb.example.com))"
+        "(connect_data=(service_name=abc_high.adb.oraclecloud.com)))"
+    )
+    dsn = DSN.parse(f"admin/oracle@123!@{descriptor}")
+
+    assert dsn.user == "admin"
+    assert dsn.password == "oracle@123!"
+    assert dsn.to_oracle_dsn() == descriptor
+    assert dsn.display() == "admin@<connect-descriptor>"

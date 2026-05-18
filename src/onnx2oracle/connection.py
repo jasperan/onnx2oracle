@@ -24,13 +24,14 @@ class DSN:
     user: str
     password: str
     host: str
-    port: int
-    service: str
+    port: int | None
+    service: str = ""
+    connect_string: str | None = None
 
     @classmethod
     def parse(cls, raw: str) -> DSN:
-        # user/password@host:port/service — password may contain '@'; split on the LAST
-        # '@...<host>:<port>/<service>' suffix.
+        # user/password@host:port/service — password may contain '@'; scan from
+        # the right so Easy Connect strings still parse when passwords contain @.
         m = re.match(r"^(?P<user>[^/]+)/(?P<rest>.+)$", raw)
         if not m:
             raise ValueError(f"Malformed DSN: {raw!r}")
@@ -49,14 +50,33 @@ class DSN:
                     service=tail.group("service"),
                 )
             idx = rest.rfind("@", 0, idx)
+
+        idx = rest.rfind("@")
+        if 0 <= idx < len(rest) - 1:
+            connect_string = rest[idx + 1:]
+            return cls(
+                user=user,
+                password=rest[:idx],
+                host=connect_string,
+                port=None,
+                service="",
+                connect_string=connect_string,
+            )
         raise ValueError(f"Malformed DSN: {raw!r}")
 
     def to_oracle_dsn(self) -> str:
         """Return the host:port/service string for python-oracledb's connect()."""
+        if self.connect_string is not None:
+            return self.connect_string
+        if self.port is None:
+            return self.host
         return f"{self.host}:{self.port}/{self.service}"
 
     def display(self) -> str:
         """Safe-for-logs representation (no password)."""
+        if self.connect_string is not None:
+            target = "<connect-descriptor>" if self.connect_string.lstrip().startswith("(") else self.connect_string
+            return f"{self.user}@{target}"
         return f"{self.user}@{self.host}:{self.port}/{self.service}"
 
 

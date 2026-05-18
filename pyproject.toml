@@ -24,13 +24,16 @@ dependencies = [
   "onnx>=1.16",
   "onnxruntime>=1.18",
   "onnxruntime-extensions>=0.11",
-  "transformers>=4.40",
+  "transformers>=4.40,<5",
   "huggingface-hub>=0.23",
   "numpy>=1.26",
   "tomli>=2.0; python_version<'3.11'",
 ]
 
 [project.optional-dependencies]
+export = [
+  "torch>=2.2",
+]
 dev = [
   "pytest>=8.0",
   "pytest-cov>=5.0",

@@ -136,6 +136,9 @@ onnx2oracle load --from-huggingface BAAI/bge-base-en-v1.5 \
   --pooling cls --normalize --dims 768 --name BGE_BASE_EN_V1_5
 ```
 
+If the repo does not ship `onnx/model.onnx`, install the PyTorch export extra first:
+`pip install "onnx2oracle[export]"`.
+
 **Known limitation**: SentencePiece-based multilingual models (like `intfloat/multilingual-e5-small`) can't round-trip to Oracle's BertTokenizer op. `onnx2oracle` raises a clear `NotImplementedError` pointing at WordPiece alternatives.
 
 ## CLI Reference

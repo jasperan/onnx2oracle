@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from typing import Any, cast
 
 import oracledb
 
@@ -33,6 +34,10 @@ def _one(cur: oracledb.Cursor, sql: str, params: dict[str, object] | None = None
     if row is None:
         return None
     return row[0]
+
+
+def _int_or_zero(value: object | None) -> int:
+    return int(cast(Any, value or 0))
 
 
 def run_preflight(dsn: DSN) -> PreflightResult:
@@ -98,12 +103,11 @@ def run_preflight(dsn: DSN) -> PreflightResult:
             checks.append(PreflightCheck("DBMS_VECTOR package", False, str(exc)))
 
         try:
-            vector_embedding_count = int(
+            vector_embedding_count = _int_or_zero(
                 _one(
                     cur,
                     "SELECT COUNT(*) FROM v$sqlfn_metadata WHERE name = 'VECTOR_EMBEDDING'",
                 )
-                or 0
             )
             checks.append(
                 PreflightCheck(
@@ -116,7 +120,7 @@ def run_preflight(dsn: DSN) -> PreflightResult:
             checks.append(PreflightCheck("VECTOR_EMBEDDING function", False, str(exc)))
 
         try:
-            mining_privs = int(
+            mining_privs = _int_or_zero(
                 _one(
                     cur,
                     """
@@ -125,7 +129,6 @@ def run_preflight(dsn: DSN) -> PreflightResult:
                     WHERE privilege IN ('CREATE MINING MODEL', 'CREATE ANY MINING MODEL')
                     """,
                 )
-                or 0
             )
             checks.append(
                 PreflightCheck(
@@ -138,7 +141,7 @@ def run_preflight(dsn: DSN) -> PreflightResult:
             checks.append(PreflightCheck("CREATE MINING MODEL privilege", False, str(exc)))
 
         try:
-            execute_privs = int(
+            execute_privs = _int_or_zero(
                 _one(
                     cur,
                     """
@@ -149,14 +152,12 @@ def run_preflight(dsn: DSN) -> PreflightResult:
                       AND privilege = 'EXECUTE'
                     """,
                 )
-                or 0
             )
-            execute_any = int(
+            execute_any = _int_or_zero(
                 _one(
                     cur,
                     "SELECT COUNT(*) FROM session_privs WHERE privilege = 'EXECUTE ANY PROCEDURE'",
                 )
-                or 0
             )
             checks.append(
                 PreflightCheck(
@@ -169,7 +170,7 @@ def run_preflight(dsn: DSN) -> PreflightResult:
             checks.append(PreflightCheck("EXECUTE on DBMS_VECTOR", False, str(exc)))
 
         try:
-            model_count = int(_one(cur, "SELECT COUNT(*) FROM user_mining_models") or 0)
+            model_count = _int_or_zero(_one(cur, "SELECT COUNT(*) FROM user_mining_models"))
             checks.append(
                 PreflightCheck(
                     "mining model catalog",

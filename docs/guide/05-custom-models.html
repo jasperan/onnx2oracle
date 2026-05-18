@@ -53,7 +53,7 @@
   <article class="doc-body">
     <div class="eyebrow">Guide 05</div>
     <h1>Custom models</h1>
-    <p class="lede">The six presets cover most English and multilingual cases. When yours isn't one of them, <code>--from-huggingface</code> loads any sentence encoder — you just need to know its pooling strategy and output dimension.</p>
+    <p class="lede">The five presets cover most English cases. When yours isn't one of them, <code>--from-huggingface</code> loads sentence encoders — you just need to know the pooling strategy, output dimension, and tokenizer family.</p>
 
     <h2>What you need to know about the model</h2>
     <p>Before calling the loader, read the HuggingFace model card for four values:</p>
@@ -64,6 +64,10 @@
       <li><strong>Max sequence length</strong> — 512 unless the card says otherwise.</li>
     </ul>
     <p>If the card is ambiguous, grep its <code>config.json</code> for <code>hidden_size</code> (= dimension) and its <code>modules.json</code> for the pooling module name.</p>
+
+    <div class="callout">
+      <strong>PyTorch fallback.</strong> Repos that already ship <code>onnx/model.onnx</code> use the default install. If the repo only ships PyTorch weights, install <code>onnx2oracle[export]</code> first so the loader can export the transformer body locally.
+    </div>
 
     <h2>Example 1 — a larger BGE variant</h2>
     <p><code>BAAI/bge-large-en-v1.5</code> uses CLS pooling and emits 1024-d vectors.</p>
@@ -101,7 +105,7 @@ $ onnx2oracle load --from-huggingface nomic-ai/nomic-embed-text-v1.5 \
     <table>
       <thead><tr><th>Flag</th><th>Effect</th></tr></thead>
       <tbody>
-        <tr><td class="mono">--pooling mean</td><td>Wraps the encoder output in <code>ReduceMean</code> across the sequence axis, masked by the attention mask.</td></tr>
+        <tr><td class="mono">--pooling mean</td><td>Wraps the encoder output in <code>ReduceMean</code> across the emitted token sequence.</td></tr>
         <tr><td class="mono">--pooling cls</td><td>Wraps the encoder output in <code>Gather(axis=1, indices=[0])</code> — takes the CLS token's hidden state.</td></tr>
         <tr><td class="mono">--dims N</td><td>Asserts the final output shape. If the graph's actual output shape disagrees, the loader errors before calling Oracle — cheap to catch locally.</td></tr>
         <tr><td class="mono">--max-length N</td><td>Upper bound on tokens per input. Longer inputs get truncated. Default 512.</td></tr>
