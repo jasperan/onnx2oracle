@@ -1,6 +1,6 @@
 # onnx2oracle
 
-> Load any ONNX sentence-transformer embedding model into an Oracle AI Database 23ai or 26ai instance. The authoritative manual is library-agnostic: it works with raw Python and SQL, no CLI dependency required.
+> Load ONNX sentence-transformer embedding models AND cross-encoder reranker models into an Oracle AI Database or Oracle AI Database instance. The authoritative manual is library-agnostic: it works with raw Python and SQL, no CLI dependency required.
 
 ## The manual
 
@@ -15,7 +15,7 @@ A single self-contained ONNX graph whose input is a raw string and whose output 
 
 ## Prerequisites
 
-- Oracle AI Database 23ai or 26ai (the `DBMS_VECTOR` package and `VECTOR_EMBEDDING` require it)
+- Oracle AI Database or Oracle AI Database (the `DBMS_VECTOR` package and `VECTOR_EMBEDDING` require it)
 - DB user privileges: `CREATE MINING MODEL`, `EXECUTE ON DBMS_VECTOR`
 - Python 3.10+
 - `pip install onnx onnxruntime onnxruntime-extensions transformers huggingface-hub oracledb`
@@ -27,13 +27,30 @@ WordPiece tokenizers (BERT, MiniLM, MPNet, BGE) work. SentencePiece and Unigram 
 
 ## Curated presets
 
+Embedding models (queried via `VECTOR_EMBEDDING`):
 - sentence-transformers/all-MiniLM-L6-v2: 384 dims, ~90 MB, mean pool
 - sentence-transformers/all-MiniLM-L12-v2: 384 dims, ~130 MB, mean pool
 - sentence-transformers/all-mpnet-base-v2: 768 dims, ~420 MB, mean pool
 - BAAI/bge-small-en-v1.5: 384 dims, ~130 MB, CLS pool
 - nomic-ai/nomic-embed-text-v1: 768 dims, ~540 MB, mean pool
 
+Reranker models (queried via `PREDICTION(model USING q AS DATA1, d AS DATA2)`):
+- cross-encoder/ms-marco-MiniLM-L-6-v2: scalar logit, ~90 MB
+- cross-encoder/ms-marco-MiniLM-L-12-v2: scalar logit, ~130 MB
+
 Refresh real Oracle pass/fail evidence with `scripts/check_model_compatibility.py --all-presets`.
+
+## Reranker query
+
+```
+SELECT PREDICTION(MS_MARCO_MINILM_L_6_V2
+       USING 'How many people live in Berlin?' AS DATA1,
+             'Berlin has a population of 3.7 million.' AS DATA2)
+       AS score
+FROM dual;
+```
+
+Reranker metadata sent to `LOAD_ONNX_MODEL` is `{"function":"regression","regressionOutput":"logits","input":{"pre_text_1":["DATA1"],"pre_text_2":["DATA2"]}}`. Output is a scalar logit; apply `1 / (1 + EXP(-score))` for a [0,1] probability. Use this pattern for two-stage retrieval: vector search → top-K → cross-encoder rerank.
 
 ## Query once loaded
 
@@ -57,7 +74,7 @@ VALUES (1, :text, VECTOR_EMBEDDING(ALL_MINILM_L6_V2 USING :text AS DATA));
 
 Dimension must match the model: 384 for MiniLM and BGE-small, 768 for MPNet and Nomic.
 
-## Local Oracle 26ai Free container
+## Local Oracle AI Database Free container
 
 Start the bundled container and wait for SQL readiness:
 
@@ -92,7 +109,7 @@ That starts Oracle, records the DB banner and container image id, loads `all-Min
 
 ## Troubleshooting
 
-- ORA-00942: Oracle 23ai or 26ai is required, and the user needs dictionary access.
+- ORA-00942: Oracle AI Database is required, and the user needs dictionary access.
 - ORA-20000: opset mismatch (rebuild with onnx>=1.16, opset 18), or the metadata input tensor name doesn't match the graph (should be `pre_text` when using `prefix1="pre_"`).
 - ORA-01031: Grant `EXECUTE ON DBMS_VECTOR` and `CREATE MINING MODEL` as SYSDBA.
 - BertTokenizer errors: the tokenizer is SentencePiece. Swap to a WordPiece model.

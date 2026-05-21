@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`onnx2oracle` ships a sentence-transformer HuggingFace repo into an Oracle AI Database 26ai instance as a single self-contained ONNX graph that Oracle's `DBMS_VECTOR.LOAD_ONNX_MODEL` can register. After registration, `VECTOR_EMBEDDING(MODEL USING :text AS DATA)` runs the full tokenizer + transformer + pooling + L2-normalize chain entirely in-database.
+`onnx2oracle` ships a sentence-transformer HuggingFace repo into an Oracle AI Database instance as a single self-contained ONNX graph that Oracle's `DBMS_VECTOR.LOAD_ONNX_MODEL` can register. After registration, `VECTOR_EMBEDDING(MODEL USING :text AS DATA)` runs the full tokenizer + transformer + pooling + L2-normalize chain entirely in-database.
 
 Published to PyPI as `onnx2oracle`. Python 3.10+. CLI entry point: `onnx2oracle` (Typer).
 
@@ -24,7 +24,7 @@ pytest tests/ -v -m "not slow and not integration"
 # Slow tests (real HuggingFace downloads, still no DB)
 pytest tests/test_pipeline.py -v -m slow
 
-# Integration test — needs a live Oracle 26ai Free container
+# Integration test — needs a live Oracle AI Database Free container
 ORACLE_PORT=1524 ORACLE_DSN='system/yourpw@localhost:1524/FREEPDB1' \
   pytest tests/test_loader_integration.py --run-integration -v
 

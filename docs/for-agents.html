@@ -90,7 +90,7 @@
     <h1 id="hero">For Coding Agents</h1>
     <p class="lede">
       This page teaches a coding agent how to load any sentence-transformer ONNX model into an
-      Oracle AI Database 23ai or 26ai instance using raw Python and SQL. Paste this URL into your
+      Oracle AI Database or Oracle AI Database instance using raw Python and SQL. Paste this URL into your
       agent, give it a target model plus DSN, and it'll write the code itself.
     </p>
 
@@ -107,7 +107,7 @@
     <div class="copy-wrap">
       <button class="copy-btn" type="button" data-copy>Copy</button>
 <pre><code>You are loading an ONNX embedding model into an Oracle AI Database
-26ai instance.
+Oracle AI Database instance.
 
 Read the manual at:
 https://jasperan.github.io/onnx2oracle/for-agents.html
@@ -125,8 +125,8 @@ end and report its output back.</code></pre>
     <p>Confirm each of these before writing any code. If a check fails, stop and tell the user
       exactly which one.</p>
     <ul>
-      <li>Oracle AI Database <strong>23ai or 26ai</strong>. The <code>DBMS_VECTOR</code> package and
-        <code>VECTOR_EMBEDDING</code> landed in 23ai. Check with
+      <li>Oracle AI Database <strong>Oracle AI Database</strong>. The <code>DBMS_VECTOR</code> package and
+        <code>VECTOR_EMBEDDING</code> landed in Oracle AI Database. Check with
         <code>SELECT BANNER FROM v$version;</code>.</li>
       <li>DB user has <code>CREATE MINING MODEL</code> and <code>EXECUTE ON DBMS_VECTOR</code>.
         Check with:
@@ -141,7 +141,7 @@ SELECT * FROM user_tab_privs WHERE table_name = 'DBMS_VECTOR';</code></pre></li>
 
     <div class="callout">
       <strong>Local evidence loop.</strong> In an <code>onnx2oracle</code> checkout, run
-      <code>scripts/run_real_db_integration.sh</code> when you need proof against a real Oracle 26ai
+      <code>scripts/run_real_db_integration.sh</code> when you need proof against a real Oracle AI Database
       Free container. It starts Docker, records the database banner and image id, loads MiniLM,
       verifies <code>VECTOR_EMBEDDING</code>, and runs the live integration test. Use
       <code>ORACLE_PWD</code>, <code>ORACLE_PORT</code>, <code>ORACLE_IMAGE</code>, and
@@ -570,7 +570,7 @@ ORACLE_NAME = safe_oracle_name(ORACLE_NAME)</code></pre>
     <ul>
       <li><strong>ORA-00942: table or view does not exist</strong> when querying
         <code>user_mining_models</code>. The DB user lacks <code>SELECT ANY DICTIONARY</code>, or
-        the instance is pre-23ai.</li>
+        the instance is pre-Oracle AI Database.</li>
       <li><strong>ORA-20000: LOAD_ONNX_MODEL failed</strong>. Two causes. First: opset mismatch.
         Rebuild with <code>onnx&gt;=1.16</code> and opset 18. Second: the metadata JSON's input
         tensor name doesn't match the graph. It must equal whatever the <code>prefix1=</code>

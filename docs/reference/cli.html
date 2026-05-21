@@ -46,6 +46,7 @@
       <li><a href="#load"><span class="n">·</span>load</a></li>
       <li><a href="#preflight"><span class="n">·</span>preflight</a></li>
       <li><a href="#verify"><span class="n">·</span>verify</a></li>
+      <li><a href="#rerank"><span class="n">·</span>rerank</a></li>
       <li><a href="#docker"><span class="n">·</span>docker</a></li>
       <li><a href="#config"><span class="n">·</span>config</a></li>
       <li><a href="#dsn"><span class="n">·</span>DSN resolution</a></li>
@@ -63,30 +64,35 @@ onnx2oracle presets</code></pre>
     <p><code>version</code> prints the package version. <code>presets</code> prints the five registered models with their Oracle names, HF repos, and dimensions.</p>
 
     <h2 id="load">load</h2>
-    <p>The primary command. Two shapes — preset or HuggingFace repo.</p>
+    <p>The primary command. Three shapes — embedding preset, reranker preset, or HuggingFace repo (with <code>--task</code> to pick the pipeline shape).</p>
     <pre><code>onnx2oracle load &lt;preset&gt; [--target local | --dsn user/pw@host:port/service]
                          [--force] [--name ORACLE_NAME] [--cache-dir PATH]
 
-onnx2oracle load --from-huggingface &lt;hf/repo&gt; --pooling {mean,cls}
+onnx2oracle load --from-huggingface &lt;hf/repo&gt; --task embedding --pooling {mean,cls}
                  [--normalize/--no-normalize] [--max-length 512]
                  --dims 384 --name ORACLE_NAME
+                 [--target local | --dsn ...]
+
+onnx2oracle load --from-huggingface &lt;cross-encoder/...&gt; --task reranker
+                 --name ORACLE_NAME [--max-length 512]
                  [--target local | --dsn ...]</code></pre>
 
     <h3>Flags</h3>
     <table>
       <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td class="mono">&lt;preset&gt;</td><td>One of the five registered names. <code>onnx2oracle presets</code> shows the list.</td></tr>
-        <tr><td class="mono">--from-huggingface</td><td>Alternative to preset. Fully-qualified HF repo (e.g. <code>BAAI/bge-large-en-v1.5</code>).</td></tr>
+        <tr><td class="mono">&lt;preset&gt;</td><td>One of the registered presets (5 embedding + 2 reranker). <code>onnx2oracle presets</code> shows the list and which task each one is.</td></tr>
+        <tr><td class="mono">--from-huggingface</td><td>Alternative to preset. Fully-qualified HF repo (e.g. <code>BAAI/bge-large-en-v1.5</code> or <code>cross-encoder/ms-marco-MiniLM-L-6-v2</code>).</td></tr>
+        <tr><td class="mono">--task</td><td><code>embedding</code> (default) or <code>reranker</code>. Determines the pipeline shape and the metadata sent to <code>LOAD_ONNX_MODEL</code> (<code>function:"embedding"</code> vs <code>function:"regression"</code>). When a preset is named, its task overrides this flag.</td></tr>
         <tr><td class="mono">--target local</td><td>Use the local Docker DSN <code>system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1</code>.</td></tr>
         <tr><td class="mono">--dsn</td><td>Explicit connection string. See <a href="#dsn">DSN resolution</a>.</td></tr>
         <tr><td class="mono">--force</td><td>Drop and reload if the model name already exists in <code>user_mining_models</code>.</td></tr>
         <tr><td class="mono">--name</td><td>Override the Oracle mining-model identifier. Required for <code>--from-huggingface</code>.</td></tr>
         <tr><td class="mono">--cache-dir</td><td>Where to cache the HuggingFace download. Defaults to <code>~/.onnx2oracle/cache</code>.</td></tr>
-        <tr><td class="mono">--pooling</td><td><code>mean</code> or <code>cls</code>. Custom loads only — presets encode this.</td></tr>
-        <tr><td class="mono">--normalize / --no-normalize</td><td>Append L2 normalization. Default on.</td></tr>
+        <tr><td class="mono">--pooling</td><td><code>mean</code> or <code>cls</code>. Embedding custom loads only — presets encode this; ignored for reranker loads.</td></tr>
+        <tr><td class="mono">--normalize / --no-normalize</td><td>Append L2 normalization. Embedding only. Default on.</td></tr>
         <tr><td class="mono">--max-length</td><td>Token truncation limit. Default 512.</td></tr>
-        <tr><td class="mono">--dims</td><td>Asserted output dimension. Custom loads only.</td></tr>
+        <tr><td class="mono">--dims</td><td>Asserted output dimension. Embedding custom loads only; required when <code>--task embedding</code> with <code>--from-huggingface</code>.</td></tr>
       </tbody>
     </table>
 
@@ -97,13 +103,17 @@ onnx2oracle load --from-huggingface &lt;hf/repo&gt; --pooling {mean,cls}
 
     <h2 id="verify">verify</h2>
     <pre><code>onnx2oracle verify [--target local | --dsn ...] [--name ORACLE_NAME]</code></pre>
-    <p>Runs three checks against the named model (or the last one loaded in the session):</p>
-    <ol>
-      <li><code>VECTOR_EMBEDDING</code> returns a vector of the expected dimension.</li>
-      <li>The vector is float32.</li>
-      <li><code>cosine(v, v) = 1.000</code> on a deterministic string.</li>
-    </ol>
+    <p>Auto-detects the model's task by reading <code>user_mining_models.mining_function</code>. For embedding models, runs <code>VECTOR_EMBEDDING</code>, asserts shape and L2 norm, and runs a cosine-sanity check (<code>king/queen</code> &gt; <code>king/banana</code>). For reranker models (<code>function = REGRESSION</code>), runs <code>PREDICTION</code> on a known-relevant and known-irrelevant pair and asserts <code>relevant &gt; irrelevant</code>.</p>
     <p>Exit code 0 on success, non-zero otherwise.</p>
+
+    <h2 id="rerank">rerank</h2>
+    <pre><code>onnx2oracle rerank --name ORACLE_NAME --query "..." --doc "doc1" [--doc "doc2" ...]
+                  [--target local | --dsn ...]</code></pre>
+    <p>Scores each (query, doc) pair against a registered reranker model using <code>PREDICTION(model USING :q AS DATA1, :d AS DATA2)</code>. Returns a sorted table (highest score first) with rank, score, and document. Refuses to run if the named model is registered as anything other than a reranker.</p>
+    <pre><code>onnx2oracle rerank --name MS_MARCO_MINILM_L_6_V2 \
+  --query "How many people live in Berlin?" \
+  --doc "Berlin has a population of 3.7 million inhabitants." \
+  --doc "Bananas are a popular tropical fruit."</code></pre>
 
     <h2 id="docker">docker</h2>
     <pre><code>onnx2oracle docker up [--wait] [--wait-timeout 600] [--wait-interval 5]

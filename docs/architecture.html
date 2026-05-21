@@ -196,7 +196,7 @@
       <span class="badge hf">transformers</span>
       <span class="badge hf">huggingface-hub</span>
       <span class="badge oracle">oracledb (thin)</span>
-      <span class="badge oracle">Oracle 26ai Free</span>
+      <span class="badge oracle">Oracle AI Database Free</span>
     </div>
   </header>
 
@@ -244,7 +244,7 @@ flowchart TD
     CONN --> SRC["presets.py<br/>or --from-huggingface"]
     SRC --> PIPE["pipeline.py<br/>HF model + tokenizer<br/>-&gt; augmented ONNX"]
     PIPE -- bytes --> LOAD["loader.py<br/>DBMS_VECTOR.LOAD_ONNX_MODEL"]
-    LOAD --> DB[("Oracle 26ai Free<br/>or Cloud ADB")]
+    LOAD --> DB[("Oracle AI Database Free<br/>or Cloud ADB")]
     DB --> VER["verify.py<br/>VECTOR_EMBEDDING<br/>+ cosine sanity"]
 
     classDef cli fill:#1c232d,stroke:#58a6ff,color:#e6edf3

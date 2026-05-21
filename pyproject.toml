@@ -73,7 +73,7 @@ ignore = ["B008"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
-  "integration: requires a running Oracle 26ai Free container",
+  "integration: requires a running Oracle AI Database Free container",
   "slow: slow tests (HF downloads), skip with `-m 'not slow'`",
 ]
 

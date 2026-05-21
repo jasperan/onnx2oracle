@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>onnx2oracle — embeddings that live inside your database</title>
-<meta name="description" content="Load HuggingFace embedding models into Oracle Database 23ai/26ai as native ONNX mining models. One command. No external services.">
+<meta name="description" content="Load HuggingFace embedding AND cross-encoder reranker models into Oracle AI Database as native ONNX mining models. One command. No external services.">
 <link rel="stylesheet" href="assets/style.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1815'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='600' fill='%23f0ebe0' text-anchor='middle'%3Eo%3C/text%3E%3C/svg%3E">
 <script src="assets/main.js" defer></script>
@@ -40,11 +40,12 @@
 
 <section class="hero shell" aria-labelledby="hero-h">
   <div>
-    <div class="eyebrow">v0.1 — Oracle 23ai &amp; 26ai</div>
-    <h1 id="hero-h">Embeddings that live inside your database.</h1>
+    <div class="eyebrow">v0.2 — Oracle AI Database</div>
+    <h1 id="hero-h">Embeddings &amp; rerankers that live inside your database.</h1>
     <p class="lede">
-      <code>onnx2oracle</code> packages any HuggingFace sentence-embedding model as an augmented ONNX graph
-      and loads it directly into Oracle via <code>DBMS_VECTOR.LOAD_ONNX_MODEL</code>. No sidecar, no queue, no network hop.
+      <code>onnx2oracle</code> packages any HuggingFace sentence-embedding model — and now cross-encoder rerankers —
+      as an augmented ONNX graph and loads it directly into Oracle via <code>DBMS_VECTOR.LOAD_ONNX_MODEL</code>.
+      Embeddings via <code>VECTOR_EMBEDDING</code>, relevance scoring via <code>PREDICTION</code>. No sidecar, no queue, no network hop.
     </p>
     <div class="cta-row">
       <a class="btn bare" href="guide/01-quickstart.html">
@@ -57,8 +58,8 @@
       </a>
     </div>
     <div class="hero-meta">
-      <span><strong>6</strong> preset models</span>
-      <span><strong>384 / 768</strong> dim vectors</span>
+      <span><strong>7</strong> preset models (5 embed · 2 rerank)</span>
+      <span><strong>384 / 768</strong> dim vectors · <strong>scalar</strong> reranker logits</span>
       <span><strong>BLOB</strong>-direct — no filesystem staging</span>
     </div>
   </div>
@@ -69,7 +70,7 @@
       <span class="terminal-title">~/projects — zsh</span>
       <div class="terminal-body">
         <span class="term-line t1"><span class="term-prompt">$ </span><span class="term-cmd">onnx2oracle docker up --wait</span></span>
-        <span class="term-line t2"><span class="term-out">&nbsp;&nbsp;Oracle 26ai Free ready on localhost:1521 &nbsp;</span><span class="term-ok">ok</span></span>
+        <span class="term-line t2"><span class="term-out">&nbsp;&nbsp;Oracle AI Database Free ready on localhost:1521 &nbsp;</span><span class="term-ok">ok</span></span>
         <span class="term-line t3"><span class="term-prompt">$ </span><span class="term-cmd">onnx2oracle load all-MiniLM-L6-v2</span></span>
         <span class="term-line t4"><span class="term-out">&nbsp;&nbsp;Downloaded (90 MB) · augmented · loaded as ALL_MINILM_L6_V2 &nbsp;</span><span class="term-ok">ok</span></span>
         <span class="term-line t5"><span class="term-prompt">$ </span><span class="term-cmd">onnx2oracle verify</span></span>
@@ -86,7 +87,7 @@
       <h2 id="reasons-h">In-database embeddings, for one reason at a time.</h2>
       <p>
         Most vector pipelines bolt an embedding microservice in front of the database. That adds a second system
-        to deploy, secure, patch, and observe. Oracle 23ai and 26ai can run the model itself — if you can get it in.
+        to deploy, secure, patch, and observe. Oracle AI Database can run the model itself — if you can get it in.
       </p>
     </div>
     <div class="reasons-list" role="list">
@@ -114,8 +115,8 @@
       <article class="reason" role="listitem">
         <div class="reason-idx">04</div>
         <div>
-          <h3>One binary, six models, zero YAML</h3>
-          <p><code>onnx2oracle presets</code> shows the shelf. <code>load &lt;name&gt;</code> does the rest, including tokenizer wrapping and L2 normalization.</p>
+          <h3>One binary, seven models, zero YAML</h3>
+          <p><code>onnx2oracle presets</code> shows the shelf — 5 embedding models plus 2 reranker presets. <code>load &lt;name&gt;</code> does the rest, including tokenizer wrapping, L2 normalization (embeddings), or [CLS] q [SEP] d [SEP] splicing (rerankers).</p>
         </div>
       </article>
     </div>
@@ -124,8 +125,8 @@
 
 <section class="shell" aria-labelledby="presets-h">
   <div class="eyebrow">Presets</div>
-  <h2 id="presets-h">Six vetted models. Pick by dimension, size, and language.</h2>
-  <p style="max-width:60ch;margin-bottom:28px;">Each preset maps a HuggingFace repo to an Oracle mining-model name. Dimensions and pooling strategies match the model card — not a rewrite.</p>
+  <h2 id="presets-h">Seven vetted models. Embed, or rerank, or both.</h2>
+  <p style="max-width:60ch;margin-bottom:28px;">Five embedding models plus two cross-encoder rerankers. Each preset maps a HuggingFace repo to an Oracle mining-model name. Dimensions, pooling, and task type match the model card — not a rewrite.</p>
 
   <div class="preset-grid">
     <article class="preset">
@@ -152,6 +153,16 @@
       <div class="preset-head"><span class="preset-name">nomic-embed-text-v1</span><span class="preset-dim">768-d</span></div>
       <p class="preset-desc">Long-context (8192 tokens) with Matryoshka-friendly output. Biggest curated preset — plan the disk.</p>
       <div class="preset-meta"><span>~540 MB</span><span>mean pool</span><span>NOMIC_EMBED_TEXT_V1</span></div>
+    </article>
+    <article class="preset">
+      <div class="preset-head"><span class="preset-name">ms-marco-MiniLM-L-6-v2</span><span class="preset-dim">reranker</span></div>
+      <p class="preset-desc">Cross-encoder reranker. Loaded with <code>function:"regression"</code>; queried with <code>PREDICTION(model USING q AS DATA1, d AS DATA2)</code> for two-stage retrieval.</p>
+      <div class="preset-meta"><span>~90 MB</span><span>scalar logit</span><span>MS_MARCO_MINILM_L_6_V2</span></div>
+    </article>
+    <article class="preset">
+      <div class="preset-head"><span class="preset-name">ms-marco-MiniLM-L-12-v2</span><span class="preset-dim">reranker</span></div>
+      <p class="preset-desc">Deeper cross-encoder reranker. Higher quality at ~30% more latency than L-6. Same WordPiece tokenizer, same SQL surface.</p>
+      <div class="preset-meta"><span>~130 MB</span><span>scalar logit</span><span>MS_MARCO_MINILM_L_12_V2</span></div>
     </article>
   </div>
 
@@ -181,7 +192,7 @@
     <a class="guide-card bare" href="guide/03-models.html">
       <span class="num">03</span>
       <h3>Pick a model</h3>
-      <p>Decision tree across the six presets: English vs. multilingual, 384 vs. 768, speed vs. recall.</p>
+      <p>Decision tree across embedding + reranker presets: English vs. multilingual, 384 vs. 768, speed vs. recall, embed vs. rerank.</p>
     </a>
     <a class="guide-card bare" href="guide/04-connect-to-cloud.html">
       <span class="num">04</span>

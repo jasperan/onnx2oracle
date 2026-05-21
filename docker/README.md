@@ -1,4 +1,4 @@
-# Local Oracle 26ai Free
+# Local Oracle AI Database Free
 
 Start:
 

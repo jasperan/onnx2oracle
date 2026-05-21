@@ -60,7 +60,7 @@
       <h2>ORA-00942 — table or view does not exist</h2>
       <p>Usually raised when <code>verify</code> queries <code>user_mining_models</code>.</p>
       <h3>What's happening</h3>
-      <p>The connected user lacks <code>SELECT ANY DICTIONARY</code>, or you're connected to an Oracle release older than 23ai. <code>DBMS_VECTOR</code> and the mining-model dictionary views only exist on 23ai and 26ai.</p>
+      <p>The connected user lacks <code>SELECT ANY DICTIONARY</code>, or you're connected to an Oracle release older than Oracle AI Database. <code>DBMS_VECTOR</code> and the mining-model dictionary views only exist on Oracle AI Database.</p>
       <h3>Fix</h3>
       <pre><code><span class="c">-- as an admin user</span>
 GRANT SELECT ANY DICTIONARY TO app_user;
@@ -75,7 +75,7 @@ SELECT BANNER FROM v$version;</code></pre>
       <p>The loader hands Oracle a blob and Oracle rejects it. Two distinct causes.</p>
 
       <h3>Cause A — opset mismatch</h3>
-      <p>Oracle's embedded ONNX runtime ingests up to opset 18 (as of 23ai/26ai). If the augmented graph was exported at a newer opset, the import aborts. The loader uses <code>onnx>=1.16</code> and emits opset 18 by default — this only bites if you're supplying pre-built ONNX bytes out of band.</p>
+      <p>Oracle's embedded ONNX runtime ingests up to opset 18 (as of Oracle AI Database). If the augmented graph was exported at a newer opset, the import aborts. The loader uses <code>onnx>=1.16</code> and emits opset 18 by default — this only bites if you're supplying pre-built ONNX bytes out of band.</p>
       <h3>Fix A</h3>
       <pre><code>$ pip install -U "onnx>=1.16"
 <span class="c"># then rebuild the augmented graph; onnx2oracle load does this itself</span></code></pre>

@@ -60,14 +60,14 @@
 
     <div class="callout">
       <strong>Prerequisites.</strong> Docker with ~6 GB of free RAM, Python 3.11+, and <code>pip install onnx2oracle</code>.
-      You do not need Oracle installed locally — the compose file pulls Oracle 26ai Free.
+      You do not need Oracle installed locally — the compose file pulls Oracle AI Database Free.
     </div>
 
     <div class="steps">
       <div class="step">
         <div class="step-num">01</div>
         <div>
-          <h3>Start Oracle 26ai Free</h3>
+          <h3>Start Oracle AI Database Free</h3>
           <p>First run downloads the image and initializes the database. Expect three to five minutes. The <code>--wait</code> flag runs a bounded SQL readiness probe so the command only returns when the PDB accepts connections.</p>
           <pre><code>$ onnx2oracle docker up --wait --wait-timeout 900
   pulling container-registry.oracle.com/database/free:latest

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Model matrix — onnx2oracle</title>
-<meta name="description" content="All five presets, sortable. HF repo, dimensions, FP32 size, pooling, Oracle mining-model name.">
+<meta name="description" content="All seven presets (5 embedding + 2 reranker), sortable. HF repo, task, dimensions, FP32 size, pooling, Oracle mining-model name.">
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1815'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='600' fill='%23f0ebe0' text-anchor='middle'%3Eo%3C/text%3E%3C/svg%3E">
 <script src="../assets/main.js" defer></script>
@@ -51,6 +51,7 @@
       <thead>
         <tr>
           <th>Preset</th>
+          <th>Task</th>
           <th>HuggingFace repo</th>
           <th>Dimensions</th>
           <th>Size (FP32)</th>
@@ -62,6 +63,7 @@
         <!-- BEGIN: preset-table-html -->
         <tr>
           <td class="mono">all-MiniLM-L6-v2</td>
+          <td class="mono">embedding</td>
           <td class="mono">sentence-transformers/all-MiniLM-L6-v2</td>
           <td class="mono" data-sort-value="384">384</td>
           <td class="mono" data-sort-value="90">~90 MB</td>
@@ -70,6 +72,7 @@
         </tr>
         <tr>
           <td class="mono">all-MiniLM-L12-v2</td>
+          <td class="mono">embedding</td>
           <td class="mono">sentence-transformers/all-MiniLM-L12-v2</td>
           <td class="mono" data-sort-value="384">384</td>
           <td class="mono" data-sort-value="130">~130 MB</td>
@@ -78,6 +81,7 @@
         </tr>
         <tr>
           <td class="mono">all-mpnet-base-v2</td>
+          <td class="mono">embedding</td>
           <td class="mono">sentence-transformers/all-mpnet-base-v2</td>
           <td class="mono" data-sort-value="768">768</td>
           <td class="mono" data-sort-value="420">~420 MB</td>
@@ -86,6 +90,7 @@
         </tr>
         <tr>
           <td class="mono">bge-small-en-v1.5</td>
+          <td class="mono">embedding</td>
           <td class="mono">BAAI/bge-small-en-v1.5</td>
           <td class="mono" data-sort-value="384">384</td>
           <td class="mono" data-sort-value="130">~130 MB</td>
@@ -94,15 +99,38 @@
         </tr>
         <tr>
           <td class="mono">nomic-embed-text-v1</td>
+          <td class="mono">embedding</td>
           <td class="mono">nomic-ai/nomic-embed-text-v1</td>
           <td class="mono" data-sort-value="768">768</td>
           <td class="mono" data-sort-value="540">~540 MB</td>
           <td class="mono">mean</td>
           <td class="mono">NOMIC_EMBED_TEXT_V1</td>
         </tr>
+        <tr>
+          <td class="mono">ms-marco-MiniLM-L-6-v2</td>
+          <td class="mono">reranker</td>
+          <td class="mono">cross-encoder/ms-marco-MiniLM-L-6-v2</td>
+          <td class="mono" data-sort-value="0">—</td>
+          <td class="mono" data-sort-value="90">~90 MB</td>
+          <td class="mono">—</td>
+          <td class="mono">MS_MARCO_MINILM_L_6_V2</td>
+        </tr>
+        <tr>
+          <td class="mono">ms-marco-MiniLM-L-12-v2</td>
+          <td class="mono">reranker</td>
+          <td class="mono">cross-encoder/ms-marco-MiniLM-L-12-v2</td>
+          <td class="mono" data-sort-value="0">—</td>
+          <td class="mono" data-sort-value="130">~130 MB</td>
+          <td class="mono">—</td>
+          <td class="mono">MS_MARCO_MINILM_L_12_V2</td>
+        </tr>
         <!-- END: preset-table-html -->
       </tbody>
     </table>
+
+    <h2>Reranker presets</h2>
+    <p>The two <code>ms-marco-MiniLM-*</code> entries above are <strong>cross-encoder rerankers</strong>, not embedding models. Oracle registers them with <code>function:"regression"</code> metadata; you query them via <code>PREDICTION(model USING q AS DATA1, d AS DATA2)</code> rather than <code>VECTOR_EMBEDDING</code>. Output is a scalar logit — higher means more relevant. Apply <code>1 / (1 + EXP(-score))</code> if you need a [0,1] probability.</p>
+    <p>SentencePiece-based rerankers like <code>BAAI/bge-reranker-base</code> are not supported (same constraint as the embedding path — Oracle's BertTokenizer op can't represent SentencePiece vocabularies). The <code>cross-encoder/ms-marco-MiniLM-*</code> family uses WordPiece and works first-class.</p>
 
     <h2>A note on sizes</h2>
     <p>The FP32 size is the on-disk footprint of the augmented ONNX — encoder plus tokenizer ops plus pooling plus L2 norm. The encoder alone is about 85% of that. These are the models as downloaded, before any Oracle-side compression or tablespace overhead.</p>

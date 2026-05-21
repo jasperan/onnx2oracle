@@ -53,7 +53,7 @@
   <article class="doc-body">
     <div class="eyebrow">Guide 05</div>
     <h1>Custom models</h1>
-    <p class="lede">The five presets cover most English cases. When yours isn't one of them, <code>--from-huggingface</code> loads sentence encoders — you just need to know the pooling strategy, output dimension, and tokenizer family.</p>
+    <p class="lede">The curated presets (5 embedding + 2 reranker) cover most English cases. When yours isn't one of them, <code>--from-huggingface</code> loads sentence encoders or cross-encoder rerankers — you just need to know the pooling strategy, output dimension, and tokenizer family (embeddings), or pass <code>--task reranker</code> (cross-encoders).</p>
 
     <h2>What you need to know about the model</h2>
     <p>Before calling the loader, read the HuggingFace model card for four values:</p>

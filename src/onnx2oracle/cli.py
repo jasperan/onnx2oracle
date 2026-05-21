@@ -26,7 +26,7 @@ app = typer.Typer(
     help="Load ONNX embedding and reranker models into Oracle AI Database.",
     no_args_is_help=True,
 )
-docker_app = typer.Typer(help="Manage a local Oracle 26ai Free container.")
+docker_app = typer.Typer(help="Manage a local Oracle AI Database Free container.")
 config_app = typer.Typer(help="Manage ~/.onnx2oracle/config.toml.")
 app.add_typer(docker_app, name="docker")
 app.add_typer(config_app, name="config")
@@ -365,7 +365,7 @@ def docker_up(
         help="Seconds between SQL readiness probes.",
     ),
 ) -> None:
-    """Start the Oracle 26ai Free container."""
+    """Start the Oracle AI Database Free container."""
     rc = _compose("up", "-d")
     if rc != 0:
         raise typer.Exit(rc)

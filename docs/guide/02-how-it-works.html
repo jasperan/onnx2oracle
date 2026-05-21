@@ -138,7 +138,7 @@
     <p>Normally the HuggingFace tokenizer is a Python object. We wrap it with <code>onnxruntime-extensions</code> so the tokenization step becomes real ONNX operators inside the graph. That means Oracle's runtime does the string → token-id conversion — no Python interpreter needed at inference time.</p>
 
     <h3>02 · The transformer encoder</h3>
-    <p>This is the unmodified encoder from the HF repo. We export it with <code>onnx>=1.16</code> at opset 18, which Oracle's 23ai/26ai ONNX runtime can ingest. Attention, layer norms, residuals — nothing special, just the encoder a sentence-transformer ships with.</p>
+    <p>This is the unmodified encoder from the HF repo. We export it with <code>onnx>=1.16</code> at opset 18, which Oracle's Oracle AI Database ONNX runtime can ingest. Attention, layer norms, residuals — nothing special, just the encoder a sentence-transformer ships with.</p>
 
     <h3>03 · Pooling</h3>
     <p>Two shapes show up in practice:</p>
