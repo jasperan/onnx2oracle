@@ -10,6 +10,8 @@ def test_all_presets_registered():
         "all-mpnet-base-v2",
         "bge-small-en-v1.5",
         "nomic-embed-text-v1",
+        "ms-marco-MiniLM-L-6-v2",
+        "ms-marco-MiniLM-L-12-v2",
     }
     assert set(PRESETS.keys()) == expected
 
@@ -22,6 +24,7 @@ def test_get_preset_returns_modelspec():
     assert spec.pooling == "mean"
     assert spec.normalize is True
     assert spec.oracle_name == "ALL_MINILM_L6_V2"
+    assert spec.task == "embedding"
 
 
 def test_get_preset_unknown_raises():
@@ -39,3 +42,20 @@ def test_oracle_names_are_uppercase_identifiers():
     for spec in PRESETS.values():
         assert spec.oracle_name.isupper()
         assert all(c.isalnum() or c == "_" for c in spec.oracle_name)
+
+
+def test_reranker_presets_are_tagged_reranker():
+    for name in ("ms-marco-MiniLM-L-6-v2", "ms-marco-MiniLM-L-12-v2"):
+        spec = get_preset(name)
+        assert spec.task == "reranker"
+        assert spec.hf_repo.startswith("cross-encoder/")
+
+
+def test_embedding_presets_default_to_embedding_task():
+    for name in (
+        "all-MiniLM-L6-v2",
+        "all-mpnet-base-v2",
+        "bge-small-en-v1.5",
+        "nomic-embed-text-v1",
+    ):
+        assert get_preset(name).task == "embedding"

@@ -16,8 +16,10 @@ from onnx2oracle.pipeline import (
     _external_data_repo_path,
     _require_torch_for_export_fallback,
     _should_use_export_fallback,
+    _splice_query_doc_subgraph,
     _truncate_and_unsqueeze_tokenizer_outputs,
     build_augmented,
+    build_reranker,
 )
 from onnx2oracle.presets import get_preset
 
@@ -133,3 +135,91 @@ def test_build_augmented_runs_end_to_end_on_cpu():
     assert out_array.shape == (384,)
     norm = float(np.linalg.norm(out_array))
     assert 0.99 < norm < 1.01, f"expected L2 norm ~1.0, got {norm}"
+
+
+def test_splice_query_doc_subgraph_produces_bert_pair_layout():
+    """Build a tiny graph: feed fake q_/d_ tokenizer outputs, run the splice in CPU
+    onnxruntime, and assert the spliced ids / segments / mask are correct."""
+    import numpy as np
+    import onnxruntime as ort
+
+    q_ids = helper.make_tensor_value_info("q_input_ids", TensorProto.INT64, [1, None])
+    q_mask = helper.make_tensor_value_info("q_attention_mask", TensorProto.INT64, [1, None])
+    d_ids = helper.make_tensor_value_info("d_input_ids", TensorProto.INT64, [1, None])
+    d_mask = helper.make_tensor_value_info("d_attention_mask", TensorProto.INT64, [1, None])
+
+    out_ids = helper.make_tensor_value_info("input_ids", TensorProto.INT64, [1, None])
+    out_mask = helper.make_tensor_value_info("attention_mask", TensorProto.INT64, [1, None])
+    out_seg = helper.make_tensor_value_info("token_type_ids", TensorProto.INT64, [1, None])
+
+    graph = helper.make_graph(
+        nodes=[],
+        name="splice_only",
+        inputs=[q_ids, q_mask, d_ids, d_mask],
+        outputs=[out_ids, out_mask, out_seg],
+    )
+    _splice_query_doc_subgraph(graph)
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 18)])
+    onnx.checker.check_model(model)
+
+    sess = ort.InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+    # q = [CLS=101, 1, 2, SEP=102] (length 4); d = [CLS=101, 7, 8, 9, SEP=102] (length 5).
+    q = np.array([[101, 1, 2, 102]], dtype=np.int64)
+    qm = np.array([[1, 1, 1, 1]], dtype=np.int64)
+    d = np.array([[101, 7, 8, 9, 102]], dtype=np.int64)
+    dm = np.array([[1, 1, 1, 1, 1]], dtype=np.int64)
+
+    ids, mask, seg = sess.run(None, {
+        "q_input_ids": q, "q_attention_mask": qm,
+        "d_input_ids": d, "d_attention_mask": dm,
+    })
+    # Expected: [CLS] 1 2 [SEP] 7 8 9 [SEP] (4 + 4 = 8 tokens; d's leading CLS dropped).
+    assert ids.tolist() == [[101, 1, 2, 102, 7, 8, 9, 102]]
+    assert mask.tolist() == [[1, 1, 1, 1, 1, 1, 1, 1]]
+    # Segments: zeros for the q span (length 4), ones for the d-tail (length 4).
+    assert seg.tolist() == [[0, 0, 0, 0, 1, 1, 1, 1]]
+
+
+@pytest.mark.slow
+def test_build_reranker_shape_and_valid_onnx():
+    spec = get_preset("ms-marco-MiniLM-L-6-v2")
+    data = build_reranker(spec)
+    assert isinstance(data, bytes)
+    assert len(data) > 1_000_000
+    model = onnx.load_from_string(data)
+    onnx.checker.check_model(model)
+
+    input_names = {i.name for i in model.graph.input}
+    assert input_names == {"pre_text_1", "pre_text_2"}
+
+    outs = list(model.graph.output)
+    assert len(outs) == 1
+    assert outs[0].name == "logits"
+
+
+@pytest.mark.slow
+def test_build_reranker_runs_end_to_end_on_cpu():
+    """Build a real ms-marco-MiniLM reranker and verify relevance ordering."""
+    import numpy as np
+    import onnxruntime as ort
+    from onnxruntime_extensions import get_library_path
+
+    spec = get_preset("ms-marco-MiniLM-L-6-v2")
+    data = build_reranker(spec)
+
+    so = ort.SessionOptions()
+    so.register_custom_ops_library(get_library_path())
+    sess = ort.InferenceSession(data, sess_options=so, providers=["CPUExecutionProvider"])
+
+    input_names = [i.name for i in sess.get_inputs()]
+    assert set(input_names) == {"pre_text_1", "pre_text_2"}
+
+    query = np.array(["How many people live in Berlin?"])
+    relevant = np.array(["Berlin has a population of 3.7 million inhabitants."])
+    irrelevant = np.array(["Bananas are a popular tropical fruit."])
+
+    r_score = sess.run(None, {"pre_text_1": query, "pre_text_2": relevant})[0]
+    i_score = sess.run(None, {"pre_text_1": query, "pre_text_2": irrelevant})[0]
+    assert float(r_score) > float(i_score), (
+        f"reranker did not order docs correctly: relevant={r_score} irrelevant={i_score}"
+    )

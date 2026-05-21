@@ -1,3 +1,4 @@
+from rich.console import Console
 from typer.testing import CliRunner
 
 import onnx2oracle.cli as cli
@@ -13,7 +14,8 @@ def test_cli_help_succeeds():
     assert "onnx2oracle" in result.stdout.lower()
 
 
-def test_presets_command_lists_all():
+def test_presets_command_lists_all(monkeypatch):
+    monkeypatch.setattr(cli, "console", Console(width=200))
     result = runner.invoke(cli.app, ["presets"])
     assert result.exit_code == 0
     for name in [
@@ -22,8 +24,77 @@ def test_presets_command_lists_all():
         "all-mpnet-base-v2",
         "bge-small-en-v1.5",
         "nomic-embed-text-v1",
+        "ms-marco-MiniLM-L-6-v2",
+        "ms-marco-MiniLM-L-12-v2",
     ]:
         assert name in result.stdout
+    assert "reranker" in result.stdout
+    assert "embedding" in result.stdout
+
+
+def test_rerank_command_requires_doc():
+    result = runner.invoke(
+        cli.app, ["rerank", "--name", "MS_MARCO_MINILM_L_6_V2", "--query", "hi"]
+    )
+    assert result.exit_code != 0
+
+
+def test_rerank_command_rejects_unsafe_model_name(monkeypatch):
+    result = runner.invoke(
+        cli.app,
+        [
+            "rerank",
+            "--name", "bad-name!",
+            "--query", "hi",
+            "--doc", "doc1",
+            "--dsn", "system/pw@localhost:1521/FREEPDB1",
+        ],
+    )
+    assert result.exit_code != 0
+
+
+def test_rerank_command_orders_by_score(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_score_pairs(_dsn, model_name, query, docs):
+        captured["model_name"] = model_name
+        captured["query"] = query
+        captured["docs"] = list(docs)
+        return [(2.5, docs[1]), (-1.0, docs[0])]
+
+    monkeypatch.setattr(cli, "_score_pairs", fake_score_pairs)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "rerank",
+            "--name", "MS_MARCO_MINILM_L_6_V2",
+            "--query", "what is panda?",
+            "--doc", "pandas eat bamboo",
+            "--doc", "the eiffel tower",
+            "--dsn", "system/pw@localhost:1521/FREEPDB1",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert captured["model_name"] == "MS_MARCO_MINILM_L_6_V2"
+    assert captured["query"] == "what is panda?"
+    assert captured["docs"] == ["pandas eat bamboo", "the eiffel tower"]
+
+
+def test_load_rejects_invalid_task():
+    result = runner.invoke(
+        cli.app,
+        [
+            "load",
+            "--from-huggingface", "cross-encoder/ms-marco-MiniLM-L-6-v2",
+            "--task", "summarization",
+            "--dsn", "system/pw@localhost:1521/FREEPDB1",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "embedding" in result.stdout
+    assert "reranker" in result.stdout
 
 
 def test_load_requires_preset_or_from_hf():

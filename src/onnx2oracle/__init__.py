@@ -1,3 +1,3 @@
-"""onnx2oracle — load ONNX embedding models into Oracle AI Database."""
+"""onnx2oracle — load ONNX embedding and reranker models into Oracle AI Database."""
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"

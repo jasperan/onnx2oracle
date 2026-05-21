@@ -1,14 +1,24 @@
-"""Curated preset registry for popular embedding models."""
+"""Curated preset registry for popular embedding and reranker models."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
 
+Task = Literal["embedding", "reranker"]
+
 
 @dataclass(frozen=True)
 class ModelSpec:
-    """Specification for an embedding model to be loaded into Oracle."""
+    """Specification for an ONNX model to be loaded into Oracle.
+
+    For ``task == "embedding"``: ``dims``, ``pooling`` and ``normalize`` describe
+    the post-transformer head appended by ``pipeline.build_augmented``.
+
+    For ``task == "reranker"``: those fields are unused (the cross-encoder head
+    is taken from the source repo's ``BertForSequenceClassification``). Keep
+    them at safe defaults so callers that don't care can ignore them.
+    """
 
     hf_repo: str
     dims: int
@@ -17,6 +27,11 @@ class ModelSpec:
     oracle_name: str
     max_length: int = 512
     approx_size_mb: int = 100  # informational
+    task: Task = "embedding"
+    # Reranker only: how much of ``max_length`` is reserved for the query.
+    # The doc gets the remainder. 64 matches MS MARCO / ms-marco-MiniLM
+    # training where queries are short and documents are long.
+    query_max_length: int = 64
 
 
 PRESETS: dict[str, ModelSpec] = {
@@ -59,6 +74,24 @@ PRESETS: dict[str, ModelSpec] = {
         normalize=True,
         oracle_name="NOMIC_EMBED_TEXT_V1",
         approx_size_mb=540,
+    ),
+    "ms-marco-MiniLM-L-6-v2": ModelSpec(
+        hf_repo="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        dims=1,
+        pooling="cls",
+        normalize=False,
+        oracle_name="MS_MARCO_MINILM_L_6_V2",
+        approx_size_mb=90,
+        task="reranker",
+    ),
+    "ms-marco-MiniLM-L-12-v2": ModelSpec(
+        hf_repo="cross-encoder/ms-marco-MiniLM-L-12-v2",
+        dims=1,
+        pooling="cls",
+        normalize=False,
+        oracle_name="MS_MARCO_MINILM_L_12_V2",
+        approx_size_mb=130,
+        task="reranker",
     ),
 }
 

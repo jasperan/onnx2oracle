@@ -13,16 +13,17 @@ from rich.console import Console
 from rich.table import Table
 
 from onnx2oracle import __version__
-from onnx2oracle.connection import DEFAULT_CONFIG_PATH, resolve_dsn
-from onnx2oracle.loader import upload_model
-from onnx2oracle.pipeline import build_augmented
+from onnx2oracle._ident import validate_oracle_name
+from onnx2oracle.connection import DEFAULT_CONFIG_PATH, DSN, resolve_dsn
+from onnx2oracle.loader import registered_task, upload_model
+from onnx2oracle.pipeline import build_augmented, build_reranker
 from onnx2oracle.preflight import run_preflight
 from onnx2oracle.presets import PRESETS, ModelSpec, get_preset
 from onnx2oracle.verify import smoke_test
 
 app = typer.Typer(
     name="onnx2oracle",
-    help="Load ONNX embedding models into Oracle AI Database.",
+    help="Load ONNX embedding and reranker models into Oracle AI Database.",
     no_args_is_help=True,
 )
 docker_app = typer.Typer(help="Manage a local Oracle 26ai Free container.")
@@ -44,16 +45,22 @@ def version() -> None:
 
 @app.command()
 def presets() -> None:
-    """List curated preset embedding models."""
+    """List curated preset embedding and reranker models."""
     table = Table(title="onnx2oracle presets")
     table.add_column("Name", style="bold cyan")
+    table.add_column("Task")
     table.add_column("Dims", justify="right")
     table.add_column("Pooling")
     table.add_column("~Size (MB)", justify="right")
     table.add_column("Oracle model name", style="dim")
     for name, spec in PRESETS.items():
         table.add_row(
-            name, str(spec.dims), spec.pooling, str(spec.approx_size_mb), spec.oracle_name,
+            name,
+            spec.task,
+            str(spec.dims) if spec.task == "embedding" else "—",
+            spec.pooling if spec.task == "embedding" else "—",
+            str(spec.approx_size_mb),
+            spec.oracle_name,
         )
     console.print(table)
 
@@ -64,19 +71,28 @@ def load(
     from_huggingface: str | None = typer.Option(
         None, "--from-huggingface", help="Raw HF repo, e.g. BAAI/bge-base-en-v1.5."
     ),
-    pooling: str = typer.Option("mean", help="Pooling for --from-huggingface: mean or cls."),
+    task: str = typer.Option(
+        "embedding", "--task", help="Pipeline shape: 'embedding' or 'reranker'."
+    ),
+    pooling: str = typer.Option("mean", help="Pooling for embedding --from-huggingface: mean or cls."),
     normalize: bool = typer.Option(True, "--normalize/--no-normalize"),
     max_length: int = typer.Option(512, help="Max tokenizer sequence length."),
-    dims: int | None = typer.Option(None, help="Expected output dims (required for --from-huggingface)."),
+    dims: int | None = typer.Option(
+        None, help="Expected output dims (required for embedding --from-huggingface)."
+    ),
     name: str | None = typer.Option(None, help="Oracle model name override."),
     target: str | None = typer.Option(None, help="'local' for Docker shortcut."),
     dsn: str | None = typer.Option(None, help="Full DSN: user/pw@host:port/service."),
     force: bool = typer.Option(False, help="Replace if already registered."),
     cache_dir: Path | None = typer.Option(None, help="HuggingFace cache dir."),
 ) -> None:
-    """Build the augmented ONNX pipeline and register it in Oracle."""
+    """Build the augmented ONNX pipeline (embedding or reranker) and register it in Oracle."""
     if not preset and not from_huggingface:
         console.print("[red]Provide a preset name or --from-huggingface[/red]")
+        raise typer.Exit(2)
+
+    if task not in ("embedding", "reranker"):
+        console.print(f"[red]--task must be 'embedding' or 'reranker', got {task!r}[/red]")
         raise typer.Exit(2)
 
     if (
@@ -90,10 +106,15 @@ def load(
 
     if preset:
         spec = get_preset(preset)
+        if task != "embedding" and task != spec.task:
+            console.print(
+                f"[yellow]--task {task!r} ignored: preset {preset!r} is registered as "
+                f"{spec.task!r}.[/yellow]"
+            )
     else:
         assert from_huggingface is not None
-        if dims is None:
-            console.print("[red]--dims is required with --from-huggingface[/red]")
+        if task == "embedding" and dims is None:
+            console.print("[red]--dims is required with --from-huggingface for embedding models[/red]")
             raise typer.Exit(2)
         if not name:
             name = from_huggingface.replace("/", "_").replace("-", "_").replace(".", "_").upper()
@@ -102,36 +123,34 @@ def load(
             raise typer.Exit(2)
         spec = ModelSpec(
             hf_repo=from_huggingface,
-            dims=dims,
+            dims=dims if dims is not None else 1,
             pooling=pooling,  # type: ignore[arg-type]
             normalize=normalize,
             oracle_name=name,
             max_length=max_length,
+            task=task,  # type: ignore[arg-type]
         )
 
     effective_name = name or spec.oracle_name
     if spec.oracle_name != effective_name:
-        spec = ModelSpec(
-            hf_repo=spec.hf_repo,
-            dims=spec.dims,
-            pooling=spec.pooling,
-            normalize=spec.normalize,
-            oracle_name=effective_name,
-            max_length=spec.max_length,
-            approx_size_mb=spec.approx_size_mb,
-        )
+        from dataclasses import replace as _replace
+        spec = _replace(spec, oracle_name=effective_name)
 
     dsn_resolved = resolve_dsn(cli_dsn=dsn, target=target)
     console.print(f"[green]Target:[/green] {dsn_resolved.display()}")
-    console.print(f"[green]Model:[/green] {spec.hf_repo} -> {spec.oracle_name}")
+    console.print(f"[green]Model:[/green] {spec.hf_repo} ({spec.task}) -> {spec.oracle_name}")
 
-    with console.status("Building augmented ONNX pipeline..."):
-        data = build_augmented(spec, cache_dir=cache_dir)
-    console.print(f"[green]Augmented ONNX built:[/green] {len(data):,} bytes")
+    if spec.task == "reranker":
+        with console.status("Building reranker ONNX pipeline..."):
+            data = build_reranker(spec, cache_dir=cache_dir)
+    else:
+        with console.status("Building augmented ONNX pipeline..."):
+            data = build_augmented(spec, cache_dir=cache_dir)
+    console.print(f"[green]ONNX built:[/green] {len(data):,} bytes")
 
     with console.status("Uploading to Oracle..."):
-        upload_model(dsn_resolved, data, spec.oracle_name, force=force)
-    console.print(f"[bold green]✓ {spec.oracle_name} registered.[/bold green]")
+        upload_model(dsn_resolved, data, spec.oracle_name, force=force, task=spec.task)
+    console.print(f"[bold green]✓ {spec.oracle_name} registered ({spec.task}).[/bold green]")
 
 
 @app.command()
@@ -191,23 +210,114 @@ def verify(
 
     console.print(f"{_mark(result.connected)} Connected")
     console.print(f"{_mark(result.model_registered)} Model {model_name} registered")
+    if result.task:
+        console.print(f"[dim]Task: {result.task}[/dim]")
     if result.sample_embedding_dims is not None:
         console.print(
             f"{_mark(True)} Sample embedding: {result.sample_embedding_dims} dims "
             f"(norm={result.sample_embedding_norm:.4f})"
         )
-    console.print(f"{_mark(result.similarity_sane)} Similarity sanity (king/queen > king/banana)")
+    if result.sample_scores is not None:
+        r_score, i_score = result.sample_scores
+        console.print(
+            f"{_mark(True)} Sample scores: relevant={r_score:.4f} irrelevant={i_score:.4f}"
+        )
+    if result.task == "reranker":
+        console.print(f"{_mark(result.similarity_sane)} Relevance sanity (relevant > irrelevant)")
+    else:
+        console.print(f"{_mark(result.similarity_sane)} Similarity sanity (king/queen > king/banana)")
     console.print(f"[dim]Elapsed: {result.elapsed_ms} ms[/dim]")
     if result.error:
         console.print(f"[red]Error:[/red] {result.error}")
+    embedding_ok = result.task != "embedding" or result.sample_embedding_dims is not None
+    reranker_ok = result.task != "reranker" or result.sample_scores is not None
     if (
         result.error
         or not result.connected
         or not result.model_registered
-        or result.sample_embedding_dims is None
+        or not embedding_ok
+        or not reranker_ok
         or not result.similarity_sane
     ):
         raise typer.Exit(1)
+
+
+@app.command()
+def rerank(
+    query: str = typer.Option(..., "--query", "-q", help="The query text."),
+    doc: list[str] = typer.Option(..., "--doc", "-d", help="Document to score (repeat for many)."),
+    name: str = typer.Option(..., "--name", help="Registered Oracle reranker model name."),
+    target: str | None = typer.Option(None, help="'local' for Docker shortcut."),
+    dsn: str | None = typer.Option(None, help="Full DSN."),
+) -> None:
+    """Score (query, document) pairs against a registered reranker model."""
+    if not doc:
+        console.print("[red]At least one --doc is required[/red]")
+        raise typer.Exit(2)
+    try:
+        validate_oracle_name(name)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+
+    if (
+        target is None
+        and dsn is None
+        and "ORACLE_DSN" not in os.environ
+        and not DEFAULT_CONFIG_PATH.exists()
+    ):
+        target = "local"
+    dsn_resolved = resolve_dsn(cli_dsn=dsn, target=target)
+
+    scores = _score_pairs(dsn_resolved, name, query, doc)
+
+    table = Table(title=f"Reranker scores for: {query!r}")
+    table.add_column("Rank", justify="right")
+    table.add_column("Score", justify="right")
+    table.add_column("Document")
+    for rank, (score, text) in enumerate(scores, start=1):
+        table.add_row(str(rank), f"{score:.4f}", text)
+    console.print(table)
+
+
+def _score_pairs(
+    dsn_resolved: DSN, model_name: str, query: str, docs: list[str]
+) -> list[tuple[float, str]]:
+    import oracledb
+
+    safe = validate_oracle_name(model_name)
+    conn = oracledb.connect(
+        user=dsn_resolved.user,
+        password=dsn_resolved.password,
+        dsn=dsn_resolved.to_oracle_dsn(),
+        tcp_connect_timeout=30,
+    )
+    try:
+        task = registered_task(conn, model_name)
+        if task is None:
+            raise ValueError(f"Model {model_name!r} is not registered in Oracle.")
+        if task != "reranker":
+            raise ValueError(
+                f"Model {model_name!r} is registered as {task!r}, not a reranker. "
+                f"Use `onnx2oracle verify` for embedding models, or load the model "
+                f"with --task reranker."
+            )
+        cur = conn.cursor()
+        # Batch all (query, doc) pairs in one round-trip via executemany.
+        params = [{"q": query, "d": d} for d in docs]
+        results: list[tuple[float, str]] = []
+        # oracledb's executemany doesn't return row sets for SELECTs, so loop with
+        # a single prepared statement (binds keep the parse tree cached).
+        sql = f"SELECT PREDICTION({safe} USING :q AS DATA1, :d AS DATA2) FROM dual"
+        for p, d in zip(params, docs, strict=True):
+            cur.execute(sql, p)
+            row = cur.fetchone()
+            score = float(row[0]) if row and row[0] is not None else float("-inf")
+            results.append((score, d))
+    finally:
+        conn.close()
+    results.sort(key=lambda r: r[0], reverse=True)
+    return results
 
 
 # Docker subcommands

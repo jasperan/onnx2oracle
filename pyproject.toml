@@ -1,7 +1,7 @@
 [project]
 name = "onnx2oracle"
-version = "0.1.1"
-description = "Load ONNX embedding models into Oracle AI Database with one command"
+version = "0.2.0"
+description = "Load ONNX embedding and reranker models into Oracle AI Database with one command"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
