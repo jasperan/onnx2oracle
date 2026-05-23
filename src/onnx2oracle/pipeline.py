@@ -65,6 +65,21 @@ def _should_use_export_fallback(exc: Exception) -> bool:
     return isinstance(exc, EntryNotFoundError) and not isinstance(exc, LocalEntryNotFoundError)
 
 
+def _generate_tokenizer_model(tokenizer: Any) -> onnx.ModelProto:
+    from onnxruntime_extensions import gen_processing_models
+
+    pre_model_raw, _ = gen_processing_models(
+        tokenizer, pre_kwargs={}, post_kwargs=cast(Any, None), opset=14
+    )
+    pre_model = cast(onnx.ModelProto, pre_model_raw)
+    pre_output_names = {o.name for o in pre_model.graph.output}
+    if "input_ids" not in pre_output_names:
+        raise ValueError(
+            f"gen_processing_models produced unexpected outputs: {pre_output_names}"
+        )
+    return pre_model
+
+
 def _truncate_and_unsqueeze_tokenizer_outputs(
     pre_model: onnx.ModelProto,
     names: list[str],
@@ -124,7 +139,6 @@ def build_augmented(spec: EmbeddingSpec, cache_dir: Path | None = None) -> bytes
     Graph shape: string -> tokenizer -> transformer -> pool -> l2-normalize -> [dims] float32.
     """
     from huggingface_hub import hf_hub_download, snapshot_download
-    from onnxruntime_extensions import gen_processing_models
     from transformers import AutoTokenizer
 
     cache_kwargs: dict[str, Any] = {}
@@ -176,16 +190,8 @@ def build_augmented(spec: EmbeddingSpec, cache_dir: Path | None = None) -> bytes
     # core transformer expects.
     tokenizer = AutoTokenizer.from_pretrained(spec.hf_repo, **cache_kwargs)
     try:
-        pre_model_raw, _ = gen_processing_models(
-            tokenizer, pre_kwargs={}, post_kwargs=cast(Any, None), opset=14
-        )
-        pre_model = cast(onnx.ModelProto, pre_model_raw)
-        pre_output_names = {o.name for o in pre_model.graph.output}
-        if "input_ids" not in pre_output_names:
-            raise ValueError(
-                f"gen_processing_models produced unexpected outputs: {pre_output_names}"
-            )
-    except Exception as _tok_err:
+        pre_model = _generate_tokenizer_model(tokenizer)
+    except ValueError as _tok_err:
         logger.warning(
             "Tokenizer %s not directly supported by gen_processing_models (%s); "
             "falling back to BertTokenizerFast.",
@@ -204,10 +210,7 @@ def build_augmented(spec: EmbeddingSpec, cache_dir: Path | None = None) -> bytes
                 f"BertTokenizer ONNX graph compatible with Oracle's DBMS_VECTOR. "
                 f"Use a model with a WordPiece vocabulary (BertTokenizer family)."
             ) from None
-        pre_model_raw, _ = gen_processing_models(
-            tokenizer, pre_kwargs={}, post_kwargs=cast(Any, None), opset=14
-        )
-        pre_model = cast(onnx.ModelProto, pre_model_raw)
+        pre_model = _generate_tokenizer_model(tokenizer)
 
     # 3) Align opsets — bump core to 18 + copy custom domains from pre
     core_model = version_converter.convert_version(core_model, 18)
@@ -387,17 +390,8 @@ def _make_tokenizer_subgraph(
     Returns the renamed model and the list of output names produced
     (``{prefix}input_ids`` etc.).
     """
-    from onnxruntime_extensions import gen_processing_models
-
-    raw, _ = gen_processing_models(
-        tokenizer, pre_kwargs={}, post_kwargs=cast(Any, None), opset=14
-    )
-    model = cast(onnx.ModelProto, raw)
+    model = _generate_tokenizer_model(tokenizer)
     output_names = {o.name for o in model.graph.output}
-    if "input_ids" not in output_names:
-        raise ValueError(
-            f"gen_processing_models produced unexpected outputs: {output_names}"
-        )
 
     original_input_name = model.graph.input[0].name
     rename: dict[str, str] = {original_input_name: input_name}
@@ -587,7 +581,7 @@ def build_reranker(spec: RerankerSpec, cache_dir: Path | None = None) -> bytes:
         d_pre, d_outs = _make_tokenizer_subgraph(
             tokenizer, prefix="d_", input_name="pre_text_2"
         )
-    except Exception as _tok_err:
+    except ValueError as _tok_err:
         logger.warning(
             "Tokenizer %s not directly supported by gen_processing_models (%s); "
             "falling back to BertTokenizerFast.",

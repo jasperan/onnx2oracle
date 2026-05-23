@@ -14,6 +14,7 @@ import onnx2oracle.pipeline as pipeline
 from onnx2oracle.pipeline import (
     _external_data_locations,
     _external_data_repo_path,
+    _generate_tokenizer_model,
     _require_torch_for_export_fallback,
     _should_use_export_fallback,
     _splice_query_doc_subgraph,
@@ -92,6 +93,36 @@ def test_export_fallback_only_handles_missing_hub_entry():
     assert _should_use_export_fallback(EntryNotFoundError("missing model.onnx"))
     assert not _should_use_export_fallback(LocalEntryNotFoundError("offline cache miss"))
     assert not _should_use_export_fallback(RepositoryNotFoundError("private or missing repo"))
+
+
+def test_generate_tokenizer_model_rejects_unexpected_outputs(monkeypatch):
+    import onnxruntime_extensions
+
+    def fake_gen_processing_models(*args, **kwargs):
+        graph = helper.make_graph(
+            nodes=[],
+            name="tokenizer",
+            inputs=[],
+            outputs=[helper.make_tensor_value_info("tokens", TensorProto.INT64, [None])],
+        )
+        return helper.make_model(graph), None
+
+    monkeypatch.setattr(onnxruntime_extensions, "gen_processing_models", fake_gen_processing_models)
+
+    with pytest.raises(ValueError, match="unexpected outputs"):
+        _generate_tokenizer_model(object())
+
+
+def test_generate_tokenizer_model_preserves_unexpected_errors(monkeypatch):
+    import onnxruntime_extensions
+
+    def fake_gen_processing_models(*args, **kwargs):
+        raise RuntimeError("converter crashed")
+
+    monkeypatch.setattr(onnxruntime_extensions, "gen_processing_models", fake_gen_processing_models)
+
+    with pytest.raises(RuntimeError, match="converter crashed"):
+        _generate_tokenizer_model(object())
 
 
 @pytest.mark.slow
