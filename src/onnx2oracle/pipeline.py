@@ -26,7 +26,7 @@ import numpy as np
 import onnx
 from onnx import TensorProto, compose, helper, numpy_helper, version_converter
 
-from onnx2oracle.presets import ModelSpec
+from onnx2oracle.presets import EmbeddingSpec, RerankerSpec
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,7 @@ def _truncate_and_unsqueeze_tokenizer_outputs(
                 shape.dim.add().dim_param = "sequence_length"
 
 
-def build_augmented(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
+def build_augmented(spec: EmbeddingSpec, cache_dir: Path | None = None) -> bytes:
     """Build the augmented ONNX pipeline for *spec* and return it as bytes.
 
     Graph shape: string -> tokenizer -> transformer -> pool -> l2-normalize -> [dims] float32.
@@ -539,7 +539,7 @@ def _splice_query_doc_subgraph(graph: onnx.GraphProto) -> None:
     graph.node.extend(nodes)
 
 
-def build_reranker(spec: ModelSpec, cache_dir: Path | None = None) -> bytes:
+def build_reranker(spec: RerankerSpec, cache_dir: Path | None = None) -> bytes:
     """Build a cross-encoder reranker ONNX graph and return its bytes.
 
     Graph shape: ``(pre_text_1: string[1], pre_text_2: string[1])`` →

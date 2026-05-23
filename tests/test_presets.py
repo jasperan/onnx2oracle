@@ -1,6 +1,6 @@
 import pytest
 
-from onnx2oracle.presets import PRESETS, ModelSpec, get_preset
+from onnx2oracle.presets import PRESETS, EmbeddingSpec, RerankerSpec, get_preset
 
 
 def test_all_presets_registered():
@@ -18,7 +18,7 @@ def test_all_presets_registered():
 
 def test_get_preset_returns_modelspec():
     spec = get_preset("all-MiniLM-L6-v2")
-    assert isinstance(spec, ModelSpec)
+    assert isinstance(spec, EmbeddingSpec)
     assert spec.hf_repo == "sentence-transformers/all-MiniLM-L6-v2"
     assert spec.dims == 384
     assert spec.pooling == "mean"
@@ -47,8 +47,12 @@ def test_oracle_names_are_uppercase_identifiers():
 def test_reranker_presets_are_tagged_reranker():
     for name in ("ms-marco-MiniLM-L-6-v2", "ms-marco-MiniLM-L-12-v2"):
         spec = get_preset(name)
+        assert isinstance(spec, RerankerSpec)
         assert spec.task == "reranker"
         assert spec.hf_repo.startswith("cross-encoder/")
+        assert not hasattr(spec, "dims")
+        assert not hasattr(spec, "pooling")
+        assert not hasattr(spec, "normalize")
 
 
 def test_embedding_presets_default_to_embedding_task():

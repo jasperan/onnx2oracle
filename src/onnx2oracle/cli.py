@@ -18,7 +18,7 @@ from onnx2oracle.connection import DEFAULT_CONFIG_PATH, DSN, resolve_dsn
 from onnx2oracle.loader import registered_task, upload_model
 from onnx2oracle.pipeline import build_augmented, build_reranker
 from onnx2oracle.preflight import run_preflight
-from onnx2oracle.presets import PRESETS, ModelSpec, get_preset
+from onnx2oracle.presets import PRESETS, EmbeddingSpec, Pooling, RerankerSpec, Task, get_preset
 from onnx2oracle.verify import smoke_test
 
 app = typer.Typer(
@@ -35,6 +35,20 @@ console = Console()
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S"
 )
+
+
+def _parse_task(value: str) -> Task:
+    if value not in ("embedding", "reranker"):
+        console.print(f"[red]--task must be 'embedding' or 'reranker', got {value!r}[/red]")
+        raise typer.Exit(2)
+    return value
+
+
+def _parse_pooling(value: str) -> Pooling:
+    if value not in ("mean", "cls"):
+        console.print(f"[red]--pooling must be 'mean' or 'cls', got {value!r}[/red]")
+        raise typer.Exit(2)
+    return value
 
 
 @app.command()
@@ -91,9 +105,7 @@ def load(
         console.print("[red]Provide a preset name or --from-huggingface[/red]")
         raise typer.Exit(2)
 
-    if task not in ("embedding", "reranker"):
-        console.print(f"[red]--task must be 'embedding' or 'reranker', got {task!r}[/red]")
-        raise typer.Exit(2)
+    parsed_task = _parse_task(task)
 
     if (
         target is None
@@ -106,30 +118,35 @@ def load(
 
     if preset:
         spec = get_preset(preset)
-        if task != "embedding" and task != spec.task:
+        if parsed_task != "embedding" and parsed_task != spec.task:
             console.print(
-                f"[yellow]--task {task!r} ignored: preset {preset!r} is registered as "
+                f"[yellow]--task {parsed_task!r} ignored: preset {preset!r} is registered as "
                 f"{spec.task!r}.[/yellow]"
             )
     else:
         assert from_huggingface is not None
-        if task == "embedding" and dims is None:
+        if parsed_task == "embedding" and dims is None:
             console.print("[red]--dims is required with --from-huggingface for embedding models[/red]")
             raise typer.Exit(2)
         if not name:
             name = from_huggingface.replace("/", "_").replace("-", "_").replace(".", "_").upper()
-        if pooling not in ("mean", "cls"):
-            console.print(f"[red]--pooling must be 'mean' or 'cls', got {pooling!r}[/red]")
-            raise typer.Exit(2)
-        spec = ModelSpec(
-            hf_repo=from_huggingface,
-            dims=dims if dims is not None else 1,
-            pooling=pooling,  # type: ignore[arg-type]
-            normalize=normalize,
-            oracle_name=name,
-            max_length=max_length,
-            task=task,  # type: ignore[arg-type]
-        )
+        if parsed_task == "embedding":
+            parsed_pooling = _parse_pooling(pooling)
+            assert dims is not None
+            spec = EmbeddingSpec(
+                hf_repo=from_huggingface,
+                dims=dims,
+                pooling=parsed_pooling,
+                normalize=normalize,
+                oracle_name=name,
+                max_length=max_length,
+            )
+        else:
+            spec = RerankerSpec(
+                hf_repo=from_huggingface,
+                oracle_name=name,
+                max_length=max_length,
+            )
 
     effective_name = name or spec.oracle_name
     if spec.oracle_name != effective_name:
