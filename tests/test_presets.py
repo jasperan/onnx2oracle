@@ -34,6 +34,7 @@ def test_get_preset_unknown_raises():
 
 def test_bge_uses_cls_pooling():
     spec = get_preset("bge-small-en-v1.5")
+    assert isinstance(spec, EmbeddingSpec)
     assert spec.pooling == "cls"
     assert spec.oracle_name == "BGE_SMALL_EN_V1_5"
 
@@ -62,4 +63,6 @@ def test_embedding_presets_default_to_embedding_task():
         "bge-small-en-v1.5",
         "nomic-embed-text-v1",
     ):
-        assert get_preset(name).task == "embedding"
+        spec = get_preset(name)
+        assert isinstance(spec, EmbeddingSpec)
+        assert spec.task == "embedding"

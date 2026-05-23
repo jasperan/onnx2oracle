@@ -24,8 +24,8 @@ import oracledb  # noqa: E402
 
 from onnx2oracle.connection import resolve_dsn  # noqa: E402
 from onnx2oracle.loader import drop_model, model_exists, upload_model  # noqa: E402
-from onnx2oracle.pipeline import build_augmented  # noqa: E402
-from onnx2oracle.presets import PRESETS, get_preset  # noqa: E402
+from onnx2oracle.pipeline import build_augmented, build_reranker  # noqa: E402
+from onnx2oracle.presets import PRESETS, EmbeddingSpec, RerankerSpec, get_preset  # noqa: E402
 from onnx2oracle.verify import smoke_test  # noqa: E402
 
 
@@ -62,20 +62,33 @@ def _check_preset(name: str, dsn, output: Path, keep_model: bool) -> bool:
         "event": "model_compatibility",
         "started_at": _utc_now(),
         "preset": name,
+        "task": spec.task,
         "hf_repo": spec.hf_repo,
         "oracle_name": spec.oracle_name,
-        "dims": spec.dims,
-        "pooling": spec.pooling,
-        "normalize": spec.normalize,
+        "approx_size_mb": spec.approx_size_mb,
         "target": dsn.display(),
     }
+    if isinstance(spec, EmbeddingSpec):
+        base.update({
+            "dims": spec.dims,
+            "pooling": spec.pooling,
+            "normalize": spec.normalize,
+        })
 
     try:
-        data = build_augmented(spec)
-        upload_model(dsn, data, spec.oracle_name, force=True)
+        if isinstance(spec, EmbeddingSpec):
+            data = build_augmented(spec)
+            upload_model(dsn, data, spec.oracle_name, force=True, task="embedding")
+        elif isinstance(spec, RerankerSpec):
+            data = build_reranker(spec)
+            upload_model(dsn, data, spec.oracle_name, force=True, task="reranker")
+        else:
+            raise TypeError(f"Unsupported preset spec type: {type(spec).__name__}")
+
         verify = smoke_test(dsn, spec.oracle_name)
         ok = verify.connected and verify.model_registered and verify.similarity_sane
-        ok = ok and verify.sample_embedding_dims == spec.dims
+        if isinstance(spec, EmbeddingSpec):
+            ok = ok and verify.sample_embedding_dims == spec.dims
         record = {
             **base,
             "status": "passed" if ok else "failed",

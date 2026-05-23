@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from onnx2oracle.presets import PRESETS  # noqa: E402
+from onnx2oracle.presets import PRESETS, EmbeddingSpec  # noqa: E402
 
 README = ROOT / "README.md"
 MODEL_MATRIX = ROOT / "docs" / "reference" / "model-matrix.html"
@@ -29,13 +29,15 @@ def _replace_block(text: str, start: str, end: str, replacement: str) -> str:
 
 def render_markdown_table() -> str:
     lines = [
-        "| Preset | HuggingFace repo | Dims | Size (FP32) | Pooling | Oracle name |",
-        "|---|---|---|---|---|---|",
+        "| Preset | Task | HuggingFace repo | Dims | Size (FP32) | Pooling | Oracle name |",
+        "|---|---|---|---|---|---|---|",
     ]
     for name, spec in PRESETS.items():
+        dims = str(spec.dims) if isinstance(spec, EmbeddingSpec) else "—"
+        pooling = spec.pooling if isinstance(spec, EmbeddingSpec) else "—"
         lines.append(
-            f"| `{name}` | {spec.hf_repo} | {spec.dims} | ~{spec.approx_size_mb} MB | "
-            f"{spec.pooling} | `{spec.oracle_name}` |"
+            f"| `{name}` | {spec.task} | {spec.hf_repo} | {dims} | ~{spec.approx_size_mb} MB | "
+            f"{pooling} | `{spec.oracle_name}` |"
         )
     return "\n".join(lines)
 
@@ -43,18 +45,22 @@ def render_markdown_table() -> str:
 def render_html_rows() -> str:
     rows: list[str] = []
     for name, spec in PRESETS.items():
+        dims = str(spec.dims) if isinstance(spec, EmbeddingSpec) else "—"
+        dims_sort = str(spec.dims) if isinstance(spec, EmbeddingSpec) else "0"
+        pooling = spec.pooling if isinstance(spec, EmbeddingSpec) else "—"
         rows.append(
             "\n".join(
                 [
                     "        <tr>",
                     f'          <td class="mono">{html.escape(name)}</td>',
+                    f'          <td class="mono">{spec.task}</td>',
                     f'          <td class="mono">{html.escape(spec.hf_repo)}</td>',
-                    f'          <td class="mono" data-sort-value="{spec.dims}">{spec.dims}</td>',
+                    f'          <td class="mono" data-sort-value="{dims_sort}">{dims}</td>',
                     (
                         f'          <td class="mono" data-sort-value="{spec.approx_size_mb}">'
                         f"~{spec.approx_size_mb} MB</td>"
                     ),
-                    f'          <td class="mono">{spec.pooling}</td>',
+                    f'          <td class="mono">{pooling}</td>',
                     f'          <td class="mono">{spec.oracle_name}</td>',
                     "        </tr>",
                 ]

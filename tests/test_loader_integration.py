@@ -17,7 +17,7 @@ import pytest
 from onnx2oracle.connection import DSN
 from onnx2oracle.loader import drop_model, model_exists, registered_task, upload_model
 from onnx2oracle.pipeline import build_augmented, build_reranker
-from onnx2oracle.presets import get_preset
+from onnx2oracle.presets import EmbeddingSpec, RerankerSpec, get_preset
 from onnx2oracle.verify import smoke_test
 
 pytestmark = pytest.mark.integration
@@ -43,6 +43,7 @@ def test_end_to_end_miniLM_L6():
     import oracledb
 
     spec = get_preset("all-MiniLM-L6-v2")
+    assert isinstance(spec, EmbeddingSpec)
     dsn = _get_dsn()
 
     data = build_augmented(spec)
@@ -78,6 +79,7 @@ def test_end_to_end_reranker_ms_marco_minilm_l6():
     import oracledb
 
     spec = get_preset("ms-marco-MiniLM-L-6-v2")
+    assert isinstance(spec, RerankerSpec)
     dsn = _get_dsn()
 
     data = build_reranker(spec)

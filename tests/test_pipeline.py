@@ -6,6 +6,8 @@ cached thereafter under ~/.cache/huggingface/). They do NOT require Oracle.
 Run with: pytest tests/test_pipeline.py -v -m slow
 """
 
+from typing import cast
+
 import onnx
 import pytest
 from onnx import TensorProto, helper, numpy_helper
@@ -22,7 +24,7 @@ from onnx2oracle.pipeline import (
     build_augmented,
     build_reranker,
 )
-from onnx2oracle.presets import get_preset
+from onnx2oracle.presets import EmbeddingSpec, RerankerSpec, get_preset
 
 
 def test_external_data_locations_reads_onnx_sidecar_metadata():
@@ -128,6 +130,7 @@ def test_generate_tokenizer_model_preserves_unexpected_errors(monkeypatch):
 @pytest.mark.slow
 def test_build_augmented_miniLM_L6_shape_and_valid_onnx():
     spec = get_preset("all-MiniLM-L6-v2")
+    assert isinstance(spec, EmbeddingSpec)
     data = build_augmented(spec)  # Uses default HF cache
     assert isinstance(data, bytes)
     assert len(data) > 1_000_000  # augmented ONNX is >1 MB
@@ -149,6 +152,7 @@ def test_build_augmented_runs_end_to_end_on_cpu():
     from onnxruntime_extensions import get_library_path
 
     spec = get_preset("all-MiniLM-L6-v2")
+    assert isinstance(spec, EmbeddingSpec)
     data = build_augmented(spec)
 
     so = ort.SessionOptions()
@@ -200,10 +204,13 @@ def test_splice_query_doc_subgraph_produces_bert_pair_layout():
     d = np.array([[101, 7, 8, 9, 102]], dtype=np.int64)
     dm = np.array([[1, 1, 1, 1, 1]], dtype=np.int64)
 
-    ids, mask, seg = sess.run(None, {
+    ids_raw, mask_raw, seg_raw = sess.run(None, {
         "q_input_ids": q, "q_attention_mask": qm,
         "d_input_ids": d, "d_attention_mask": dm,
     })
+    ids = cast(np.ndarray, ids_raw)
+    mask = cast(np.ndarray, mask_raw)
+    seg = cast(np.ndarray, seg_raw)
     # Expected: [CLS] 1 2 [SEP] 7 8 9 [SEP] (4 + 4 = 8 tokens; d's leading CLS dropped).
     assert ids.tolist() == [[101, 1, 2, 102, 7, 8, 9, 102]]
     assert mask.tolist() == [[1, 1, 1, 1, 1, 1, 1, 1]]
@@ -214,6 +221,7 @@ def test_splice_query_doc_subgraph_produces_bert_pair_layout():
 @pytest.mark.slow
 def test_build_reranker_shape_and_valid_onnx():
     spec = get_preset("ms-marco-MiniLM-L-6-v2")
+    assert isinstance(spec, RerankerSpec)
     data = build_reranker(spec)
     assert isinstance(data, bytes)
     assert len(data) > 1_000_000
@@ -236,6 +244,7 @@ def test_build_reranker_runs_end_to_end_on_cpu():
     from onnxruntime_extensions import get_library_path
 
     spec = get_preset("ms-marco-MiniLM-L-6-v2")
+    assert isinstance(spec, RerankerSpec)
     data = build_reranker(spec)
 
     so = ort.SessionOptions()
@@ -249,8 +258,8 @@ def test_build_reranker_runs_end_to_end_on_cpu():
     relevant = np.array(["Berlin has a population of 3.7 million inhabitants."])
     irrelevant = np.array(["Bananas are a popular tropical fruit."])
 
-    r_score = sess.run(None, {"pre_text_1": query, "pre_text_2": relevant})[0]
-    i_score = sess.run(None, {"pre_text_1": query, "pre_text_2": irrelevant})[0]
+    r_score = cast(np.ndarray, sess.run(None, {"pre_text_1": query, "pre_text_2": relevant})[0])
+    i_score = cast(np.ndarray, sess.run(None, {"pre_text_1": query, "pre_text_2": irrelevant})[0])
     assert float(r_score) > float(i_score), (
         f"reranker did not order docs correctly: relevant={r_score} irrelevant={i_score}"
     )
