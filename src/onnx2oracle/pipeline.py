@@ -26,6 +26,15 @@ import numpy as np
 import onnx
 from onnx import TensorProto, compose, helper, numpy_helper, version_converter
 
+from onnx2oracle.graph_stages import (
+    add_embedding_pooling,
+    add_l2_normalization,
+    clear_outputs,
+    copy_missing_opset_domains,
+    expose_dynamic_int64_sequence_outputs,
+    expose_squeezed_float_output,
+    pin_dynamic_batch_to_one,
+)
 from onnx2oracle.presets import EmbeddingSpec, RerankerSpec
 
 logger = logging.getLogger(__name__)
@@ -215,13 +224,7 @@ def build_augmented(spec: EmbeddingSpec, cache_dir: Path | None = None) -> bytes
     # 3) Align opsets — bump core to 18 + copy custom domains from pre
     core_model = version_converter.convert_version(core_model, 18)
     core_model.ir_version = pre_model.ir_version
-
-    core_domains = {o.domain for o in core_model.opset_import}
-    for o in pre_model.opset_import:
-        if o.domain not in core_domains:
-            new_o = core_model.opset_import.add()
-            new_o.domain = o.domain
-            new_o.version = o.version
+    copy_missing_opset_domains(core_model, pre_model)
 
     # 4) Unsqueeze tokenizer outputs: [seq_len] -> [1, seq_len]
     # Only process the tensor names that actually exist in the pre-model outputs
@@ -242,83 +245,26 @@ def build_augmented(spec: EmbeddingSpec, cache_dir: Path | None = None) -> bytes
         pre_model, core_model, io_map=io_map, prefix1="pre_", prefix2="core_"
     )
 
-    while len(merged.graph.output) > 0:
-        merged.graph.output.pop()
+    clear_outputs(merged.graph)
 
     # 6) Pool
-    if spec.pooling == "mean":
-        pool_axes = numpy_helper.from_array(np.array([1], dtype=np.int64), name="pool_axes_1")
-        merged.graph.initializer.append(pool_axes)
-        merged.graph.node.append(
-            helper.make_node(
-                "ReduceMean",
-                ["core_last_hidden_state", "pool_axes_1"],
-                ["pooled"],
-                keepdims=0,
-            )
-        )
-        pool_out = "pooled"
-    elif spec.pooling == "cls":
-        # Gather the first token's hidden state; keepdims = False via squeeze
-        cls_indices = numpy_helper.from_array(np.array([0], dtype=np.int64), name="cls_indices")
-        merged.graph.initializer.append(cls_indices)
-        merged.graph.node.append(
-            helper.make_node(
-                "Gather",
-                ["core_last_hidden_state", "cls_indices"],
-                ["pooled_2d"],
-                axis=1,
-            )
-        )
-        # Gather keeps dim 1 -> shape [1, 1, hidden]; squeeze dim 1 to [1, hidden]
-        squeeze_cls = numpy_helper.from_array(np.array([1], dtype=np.int64), name="squeeze_cls_axes")
-        merged.graph.initializer.append(squeeze_cls)
-        merged.graph.node.append(
-            helper.make_node("Squeeze", ["pooled_2d", "squeeze_cls_axes"], ["pooled"])
-        )
-        pool_out = "pooled"
-    else:
-        raise ValueError(f"Unsupported pooling: {spec.pooling!r}")
+    pool_out = add_embedding_pooling(merged.graph, spec.pooling)
 
     # 7) L2 normalize (optional)
-    if spec.normalize:
-        pow_exp = numpy_helper.from_array(np.array(2.0, dtype=np.float32), name="pow_exp")
-        merged.graph.initializer.append(pow_exp)
-        merged.graph.node.append(helper.make_node("Pow", [pool_out, "pow_exp"], ["squared"]))
-
-        axes_neg1 = numpy_helper.from_array(np.array([-1], dtype=np.int64), name="axes_neg1")
-        merged.graph.initializer.append(axes_neg1)
-        merged.graph.node.append(
-            helper.make_node("ReduceSum", ["squared", "axes_neg1"], ["sum_sq"], keepdims=1)
-        )
-        merged.graph.node.append(helper.make_node("Sqrt", ["sum_sq"], ["l2_norm"]))
-
-        eps = numpy_helper.from_array(np.array(1e-12, dtype=np.float32), name="eps_val")
-        merged.graph.initializer.append(eps)
-        merged.graph.node.append(helper.make_node("Max", ["l2_norm", "eps_val"], ["l2_safe"]))
-        merged.graph.node.append(helper.make_node("Div", [pool_out, "l2_safe"], ["emb_2d"]))
-        final_2d = "emb_2d"
-    else:
-        final_2d = pool_out
+    final_2d = add_l2_normalization(merged.graph, pool_out) if spec.normalize else pool_out
 
     # 8) Squeeze batch dim: [1, dims] -> [dims]
-    sq_axes = numpy_helper.from_array(np.array([0], dtype=np.int64), name="squeeze_axes_final")
-    merged.graph.initializer.append(sq_axes)
-    merged.graph.node.append(
-        helper.make_node("Squeeze", [final_2d, "squeeze_axes_final"], ["embedding"])
-    )
-
-    merged.graph.output.append(
-        helper.make_tensor_value_info("embedding", TensorProto.FLOAT, [spec.dims])
+    expose_squeezed_float_output(
+        merged.graph,
+        final_2d,
+        "embedding",
+        axes=[0],
+        shape=[spec.dims],
+        axes_initializer_name="squeeze_axes_final",
     )
 
     # Fix leftover dynamic batch dims in value_info / inputs
-    for vi in list(merged.graph.value_info) + list(merged.graph.input):
-        if vi.type.tensor_type.shape:
-            for dim in vi.type.tensor_type.shape.dim:
-                if dim.dim_param == "batch_size":
-                    dim.ClearField("dim_param")
-                    dim.dim_value = 1
+    pin_dynamic_batch_to_one(merged.graph)
 
     # Serialize
     with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as tmp:
@@ -619,26 +565,16 @@ def build_reranker(spec: RerankerSpec, cache_dir: Path | None = None) -> bytes:
     _splice_query_doc_subgraph(pre_merged.graph)
 
     # Re-expose only the spliced BERT inputs (sequence dim is dynamic).
-    while len(pre_merged.graph.output) > 0:
-        pre_merged.graph.output.pop()
-    for name in ("input_ids", "attention_mask", "token_type_ids"):
-        vi = helper.make_tensor_value_info(name, TensorProto.INT64, [1, None])
-        # ``None`` becomes an unset dim — clear it so the consumer accepts dynamic shape.
-        seq_dim = vi.type.tensor_type.shape.dim[1]
-        seq_dim.ClearField("dim_value")
-        seq_dim.dim_param = "pair_sequence_length"
-        pre_merged.graph.output.append(vi)
+    expose_dynamic_int64_sequence_outputs(
+        pre_merged.graph,
+        ("input_ids", "attention_mask", "token_type_ids"),
+        "pair_sequence_length",
+    )
 
     # 5) Align opsets — bump core to 18, sync ir_version, copy custom domains.
     core_model = version_converter.convert_version(core_model, 18)
     core_model.ir_version = pre_merged.ir_version
-    core_domains = {o.domain for o in core_model.opset_import}
-    for o in pre_merged.opset_import:
-        if o.domain not in core_domains:
-            new_o = core_model.opset_import.add()
-            new_o.domain = o.domain
-            new_o.version = o.version
-            core_domains.add(o.domain)
+    copy_missing_opset_domains(core_model, pre_merged)
 
     # Deduplicate the pre_merged opset list (compose.merge_models concatenates
     # both sub-graph opset_imports, producing duplicates) and align the default
@@ -670,27 +606,19 @@ def build_reranker(spec: RerankerSpec, cache_dir: Path | None = None) -> bytes:
     )
 
     # 7) Squeeze logits[1, 1] → scalar. The classifier head outputs core_logits.
-    while len(merged.graph.output) > 0:
-        merged.graph.output.pop()
+    clear_outputs(merged.graph)
 
-    sq_axes = numpy_helper.from_array(
-        np.array([0, 1], dtype=np.int64), name="rerank_squeeze_axes"
-    )
-    merged.graph.initializer.append(sq_axes)
-    merged.graph.node.append(
-        helper.make_node("Squeeze", ["core_logits", "rerank_squeeze_axes"], ["logits"])
-    )
-    merged.graph.output.append(
-        helper.make_tensor_value_info("logits", TensorProto.FLOAT, [])
+    expose_squeezed_float_output(
+        merged.graph,
+        "core_logits",
+        "logits",
+        axes=[0, 1],
+        shape=[],
+        axes_initializer_name="rerank_squeeze_axes",
     )
 
     # Pin any leftover dynamic batch dims to 1.
-    for vi in list(merged.graph.value_info) + list(merged.graph.input):
-        if vi.type.tensor_type.shape:
-            for dim in vi.type.tensor_type.shape.dim:
-                if dim.dim_param == "batch_size":
-                    dim.ClearField("dim_param")
-                    dim.dim_value = 1
+    pin_dynamic_batch_to_one(merged.graph)
 
     with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as tmp:
         onnx.save(merged, tmp.name)
