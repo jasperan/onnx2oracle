@@ -8,15 +8,20 @@ import sys
 from dataclasses import dataclass
 from getpass import getpass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
 
+if TYPE_CHECKING:
+    import oracledb
+
 DEFAULT_CONFIG_PATH = Path.home() / ".onnx2oracle" / "config.toml"
 DEFAULT_LOCAL_PASSWORD = "onnx2oracle"
 DEFAULT_LOCAL_PORT = 1521
+DEFAULT_CONNECT_TIMEOUT = 30
 
 
 @dataclass(frozen=True)
@@ -79,6 +84,17 @@ class DSN:
             return f"{self.user}@{target}"
         return f"{self.user}@{self.host}:{self.port}/{self.service}"
 
+    def connect(self, tcp_connect_timeout: int = DEFAULT_CONNECT_TIMEOUT) -> oracledb.Connection:
+        """Open a python-oracledb connection to this DSN."""
+        import oracledb
+
+        return oracledb.connect(
+            user=self.user,
+            password=self.password,
+            dsn=self.to_oracle_dsn(),
+            tcp_connect_timeout=tcp_connect_timeout,
+        )
+
 
 def _local_dsn() -> DSN:
     raw_port = os.environ.get("ORACLE_PORT", str(DEFAULT_LOCAL_PORT))
@@ -101,8 +117,14 @@ def resolve_dsn(
     target: str | None,
     config_path: Path = DEFAULT_CONFIG_PATH,
     interactive: bool = True,
+    default_local: bool = False,
 ) -> DSN:
-    """Resolve a DSN in precedence order: CLI > env > config file > target > prompt."""
+    """Resolve a DSN in precedence order: CLI > env > config file > target > prompt.
+
+    When *default_local* is set and none of CLI/env/config supply a DSN, the
+    ``--target local`` docker-compose shortcut is used (so the zero-config flow
+    works without an explicit ``--target``).
+    """
     if cli_dsn:
         return DSN.parse(cli_dsn)
     env = os.environ.get("ORACLE_DSN")
@@ -112,7 +134,7 @@ def resolve_dsn(
         data = tomllib.loads(config_path.read_text(encoding="utf-8"))
         if "default" in data and "dsn" in data["default"]:
             return DSN.parse(data["default"]["dsn"])
-    if target == "local":
+    if target == "local" or (default_local and target is None):
         return _local_dsn()
     if interactive and sys.stdin.isatty():
         print("No DSN resolved. Enter connection details:")

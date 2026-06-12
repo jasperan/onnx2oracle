@@ -46,12 +46,7 @@ def run_preflight(dsn: DSN) -> PreflightResult:
     checks: list[PreflightCheck] = []
 
     try:
-        conn = oracledb.connect(
-            user=dsn.user,
-            password=dsn.password,
-            dsn=dsn.to_oracle_dsn(),
-            tcp_connect_timeout=30,
-        )
+        conn = dsn.connect()
     except Exception as exc:
         return PreflightResult(
             checks=[

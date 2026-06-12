@@ -6,6 +6,7 @@ from onnx2oracle.graph_stages import (
     add_l2_normalization,
     clear_outputs,
     copy_missing_opset_domains,
+    dedupe_opset_imports,
     expose_dynamic_int64_sequence_outputs,
     expose_squeezed_float_output,
     pin_dynamic_batch_to_one,
@@ -26,6 +27,27 @@ def test_copy_missing_opset_domains_preserves_existing_domains():
 
     versions = {opset.domain: opset.version for opset in target.opset_import}
     assert versions[""] == 18
+    assert versions["ai.onnx.contrib"] == 1
+
+
+def test_dedupe_opset_imports_collapses_duplicates_and_pins():
+    model = helper.make_model(
+        helper.make_graph([], "g", [], []),
+        opset_imports=[
+            helper.make_opsetid("", 14),
+            helper.make_opsetid("", 17),
+            helper.make_opsetid("ai.onnx.contrib", 1),
+        ],
+    )
+
+    dedupe_opset_imports(model, pin={"": 18, "ai.onnx": 18})
+
+    versions = {opset.domain: opset.version for opset in model.opset_import}
+    # One entry per domain (duplicates collapsed).
+    assert len(model.opset_import) == len(versions)
+    # Pin overrides the resolved version; untouched domains keep their max.
+    assert versions[""] == 18
+    assert versions["ai.onnx"] == 18
     assert versions["ai.onnx.contrib"] == 1
 
 

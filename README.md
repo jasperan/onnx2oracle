@@ -292,15 +292,17 @@ onnx2oracle/
 │   ├── presets.py       # 7 curated ModelSpecs (5 embedding + 2 reranker)
 │   ├── connection.py    # DSN resolution (CLI > env > toml > target > prompt)
 │   ├── pipeline.py      # HF model -> augmented ONNX (embedding or reranker)
+│   ├── graph_stages.py  # Pure ONNX graph-surgery helpers shared by both builders
 │   ├── loader.py        # DBMS_VECTOR.LOAD_ONNX_MODEL wrapper + registered_task()
 │   ├── verify.py        # Smoke test via VECTOR_EMBEDDING or PREDICTION
+│   ├── preflight.py     # Pre-load DB readiness checks (version, privileges, packages)
 │   ├── _ident.py        # Oracle identifier whitelist (SQL-injection guard)
 │   └── data/
 │       └── docker-compose.yml   # Shipped in the wheel, honors ORACLE_PWD
 ├── docker/
 │   └── docker-compose.yml       # Dev-only copy for git clone workflow
 ├── docs/                         # GitHub Pages site + 22-slide presentation
-├── tests/                        # 51 unit + 4 slow + 2 integration tests
+├── tests/                        # 59 unit + 6 slow + 2 integration tests
 └── .github/workflows/            # CI matrix (3.10/3.11/3.12) + Pages deploy
 ```
 
@@ -309,19 +311,17 @@ onnx2oracle/
 ```bash
 git clone https://github.com/jasperan/onnx2oracle.git
 cd onnx2oracle
-conda create -n onnx2oracle python=3.12 -y
-conda activate onnx2oracle
-pip install -e ".[dev]"
+uv sync --extra dev
 
-pytest tests/ -v -m "not slow and not integration"   # 51 unit tests, seconds
+uv run pytest tests/ -v -m "not slow and not integration"   # 59 unit tests, seconds
 
 # Slow tests (real HF downloads, no DB):
-pytest tests/test_pipeline.py -v -m slow
+uv run pytest tests/test_pipeline.py -v -m slow
 
 # Integration tests against a live Oracle AI Database Free container — covers BOTH the
 # embedding (VECTOR_EMBEDDING) and reranker (PREDICTION) end-to-end paths:
 ORACLE_DSN='system/yourpw@localhost:1521/FREEPDB1' \
-  pytest tests/test_loader_integration.py --run-integration -v
+  uv run pytest tests/test_loader_integration.py --run-integration -v
 
 # One-command local evidence run: start Oracle, record DB evidence, load MiniLM,
 # verify VECTOR_EMBEDDING, and run the live integration test.

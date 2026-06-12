@@ -21,6 +21,30 @@ def copy_missing_opset_domains(target: onnx.ModelProto, source: onnx.ModelProto)
         target_domains.add(opset.domain)
 
 
+def dedupe_opset_imports(model: onnx.ModelProto, pin: dict[str, int] | None = None) -> None:
+    """Collapse duplicate opset imports, keeping the highest version per domain.
+
+    ``compose.merge_models`` concatenates both sub-graphs' ``opset_import`` lists,
+    which produces duplicate domain entries. *pin* overrides the resolved version
+    for specific domains (e.g. forcing the default and ``ai.onnx`` domains to 18 so
+    a downstream merge with the core transformer accepts the domains).
+    """
+    seen: dict[str, int] = {}
+    for opset in model.opset_import:
+        if opset.domain not in seen:
+            seen[opset.domain] = opset.version
+        else:
+            seen[opset.domain] = max(seen[opset.domain], opset.version)
+    if pin:
+        seen.update(pin)
+    while len(model.opset_import) > 0:
+        model.opset_import.pop()
+    for domain, version in seen.items():
+        new_opset = model.opset_import.add()
+        new_opset.domain = domain
+        new_opset.version = version
+
+
 def clear_outputs(graph: onnx.GraphProto) -> None:
     while len(graph.output) > 0:
         graph.output.pop()

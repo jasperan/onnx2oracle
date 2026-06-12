@@ -38,6 +38,17 @@ class VerifyResult:
     task: str | None = None
     sample_scores: tuple[float, float] | None = None
 
+    @property
+    def ok(self) -> bool:
+        """True only when every task-appropriate check passed."""
+        if self.error or not self.connected or not self.model_registered:
+            return False
+        if self.task == "embedding" and self.sample_embedding_dims is None:
+            return False
+        if self.task == "reranker" and self.sample_scores is None:
+            return False
+        return self.similarity_sane
+
 
 def _embed(conn: oracledb.Connection, model_name: str, text: str) -> list[float]:
     safe = validate_oracle_name(model_name)
@@ -78,36 +89,28 @@ def _cosine(a: list[float], b: list[float]) -> float:
 def smoke_test(dsn: DSN, oracle_name: str) -> VerifyResult:
     """Connect, confirm registration, and run a task-appropriate sanity check."""
     t0 = time.perf_counter()
+
+    def _elapsed_ms() -> int:
+        return int((time.perf_counter() - t0) * 1000)
+
     try:
         validate_oracle_name(oracle_name)
     except ValueError as e:
-        return VerifyResult(False, False, None, None, False, 0, str(e))
+        return VerifyResult(False, False, None, None, False, _elapsed_ms(), str(e))
 
     try:
-        conn = oracledb.connect(
-            user=dsn.user,
-            password=dsn.password,
-            dsn=dsn.to_oracle_dsn(),
-            tcp_connect_timeout=30,
-        )
+        conn = dsn.connect()
     except Exception as e:
-        return VerifyResult(False, False, None, None, False, 0, str(e))
+        return VerifyResult(False, False, None, None, False, _elapsed_ms(), str(e))
 
     try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) FROM user_mining_models WHERE model_name = :n",
-            {"n": oracle_name},
-        )
-        registered = cur.fetchone()[0] > 0
-        if not registered:
+        task = registered_task(conn, oracle_name)
+        if task is None:
             return VerifyResult(
                 True, False, None, None, False,
-                int((time.perf_counter() - t0) * 1000),
+                _elapsed_ms(),
                 f"Model {oracle_name} not registered",
             )
-
-        task = registered_task(conn, oracle_name) or "embedding"
 
         if task == "reranker":
             query = "How many people live in Berlin?"
@@ -118,7 +121,7 @@ def smoke_test(dsn: DSN, oracle_name: str) -> VerifyResult:
             if r_score is None or i_score is None:
                 return VerifyResult(
                     True, True, None, None, False,
-                    int((time.perf_counter() - t0) * 1000),
+                    _elapsed_ms(),
                     "PREDICTION returned null",
                     task=task,
                 )
@@ -129,7 +132,7 @@ def smoke_test(dsn: DSN, oracle_name: str) -> VerifyResult:
                 sample_embedding_dims=None,
                 sample_embedding_norm=None,
                 similarity_sane=sane,
-                elapsed_ms=int((time.perf_counter() - t0) * 1000),
+                elapsed_ms=_elapsed_ms(),
                 task=task,
                 sample_scores=(r_score, i_score),
             )
@@ -138,7 +141,7 @@ def smoke_test(dsn: DSN, oracle_name: str) -> VerifyResult:
         if not vec:
             return VerifyResult(
                 True, True, None, None, False,
-                int((time.perf_counter() - t0) * 1000),
+                _elapsed_ms(),
                 "VECTOR_EMBEDDING returned null",
                 task=task,
             )
@@ -153,7 +156,7 @@ def smoke_test(dsn: DSN, oracle_name: str) -> VerifyResult:
 
         return VerifyResult(
             True, True, dims, norm, sane,
-            int((time.perf_counter() - t0) * 1000),
+            _elapsed_ms(),
             task=task,
         )
     finally:

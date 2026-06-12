@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+from dataclasses import replace
 from importlib.resources import files
 from pathlib import Path
 
@@ -35,6 +36,21 @@ console = Console()
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S"
 )
+
+
+def _resolve_target_dsn(dsn: str | None, target: str | None, announce: bool = True) -> DSN:
+    """Resolve a DSN, defaulting to the local docker-compose target when nothing
+    else is configured. ``announce`` prints a note when the local fallback fires.
+    """
+    if (
+        announce
+        and target is None
+        and dsn is None
+        and "ORACLE_DSN" not in os.environ
+        and not DEFAULT_CONFIG_PATH.exists()
+    ):
+        console.print("[dim]No DSN configured — defaulting to --target local (docker-compose).[/dim]")
+    return resolve_dsn(cli_dsn=dsn, target=target, default_local=True)
 
 
 def _parse_task(value: str) -> Task:
@@ -107,15 +123,6 @@ def load(
 
     parsed_task = _parse_task(task)
 
-    if (
-        target is None
-        and dsn is None
-        and "ORACLE_DSN" not in os.environ
-        and not DEFAULT_CONFIG_PATH.exists()
-    ):
-        console.print("[dim]No DSN configured — defaulting to --target local (docker-compose).[/dim]")
-        target = "local"
-
     if preset:
         spec = get_preset(preset)
         if parsed_task != "embedding" and parsed_task != spec.task:
@@ -148,12 +155,10 @@ def load(
                 max_length=max_length,
             )
 
-    effective_name = name or spec.oracle_name
-    if spec.oracle_name != effective_name:
-        from dataclasses import replace as _replace
-        spec = _replace(spec, oracle_name=effective_name)
+    if name and spec.oracle_name != name:
+        spec = replace(spec, oracle_name=name)
 
-    dsn_resolved = resolve_dsn(cli_dsn=dsn, target=target)
+    dsn_resolved = _resolve_target_dsn(dsn, target)
     console.print(f"[green]Target:[/green] {dsn_resolved.display()}")
     console.print(f"[green]Model:[/green] {spec.hf_repo} ({spec.task}) -> {spec.oracle_name}")
 
@@ -176,16 +181,7 @@ def preflight(
     dsn: str | None = typer.Option(None, help="Full DSN."),
 ) -> None:
     """Check whether the target database is ready for ONNX model loading."""
-    if (
-        target is None
-        and dsn is None
-        and "ORACLE_DSN" not in os.environ
-        and not DEFAULT_CONFIG_PATH.exists()
-    ):
-        console.print("[dim]No DSN configured — defaulting to --target local (docker-compose).[/dim]")
-        target = "local"
-
-    dsn_resolved = resolve_dsn(cli_dsn=dsn, target=target)
+    dsn_resolved = _resolve_target_dsn(dsn, target)
     console.print(f"[green]Target:[/green] {dsn_resolved.display()}")
 
     result = run_preflight(dsn_resolved)
@@ -207,16 +203,7 @@ def verify(
     dsn: str | None = typer.Option(None, help="Full DSN."),
 ) -> None:
     """Run an end-to-end smoke test against a registered model."""
-    if (
-        target is None
-        and dsn is None
-        and "ORACLE_DSN" not in os.environ
-        and not DEFAULT_CONFIG_PATH.exists()
-    ):
-        console.print("[dim]No DSN configured — defaulting to --target local (docker-compose).[/dim]")
-        target = "local"
-
-    dsn_resolved = resolve_dsn(cli_dsn=dsn, target=target)
+    dsn_resolved = _resolve_target_dsn(dsn, target)
     model_name = name or "ALL_MINILM_L6_V2"
     console.print(f"[green]Target:[/green] {dsn_resolved.display()}")
 
@@ -246,16 +233,7 @@ def verify(
     console.print(f"[dim]Elapsed: {result.elapsed_ms} ms[/dim]")
     if result.error:
         console.print(f"[red]Error:[/red] {result.error}")
-    embedding_ok = result.task != "embedding" or result.sample_embedding_dims is not None
-    reranker_ok = result.task != "reranker" or result.sample_scores is not None
-    if (
-        result.error
-        or not result.connected
-        or not result.model_registered
-        or not embedding_ok
-        or not reranker_ok
-        or not result.similarity_sane
-    ):
+    if not result.ok:
         raise typer.Exit(1)
 
 
@@ -277,14 +255,7 @@ def rerank(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc
 
-    if (
-        target is None
-        and dsn is None
-        and "ORACLE_DSN" not in os.environ
-        and not DEFAULT_CONFIG_PATH.exists()
-    ):
-        target = "local"
-    dsn_resolved = resolve_dsn(cli_dsn=dsn, target=target)
+    dsn_resolved = _resolve_target_dsn(dsn, target)
 
     scores = _score_pairs(dsn_resolved, name, query, doc)
 
@@ -300,15 +271,8 @@ def rerank(
 def _score_pairs(
     dsn_resolved: DSN, model_name: str, query: str, docs: list[str]
 ) -> list[tuple[float, str]]:
-    import oracledb
-
     safe = validate_oracle_name(model_name)
-    conn = oracledb.connect(
-        user=dsn_resolved.user,
-        password=dsn_resolved.password,
-        dsn=dsn_resolved.to_oracle_dsn(),
-        tcp_connect_timeout=30,
-    )
+    conn = dsn_resolved.connect()
     try:
         task = registered_task(conn, model_name)
         if task is None:
@@ -320,14 +284,11 @@ def _score_pairs(
                 f"with --task reranker."
             )
         cur = conn.cursor()
-        # Batch all (query, doc) pairs in one round-trip via executemany.
-        params = [{"q": query, "d": d} for d in docs]
         results: list[tuple[float, str]] = []
-        # oracledb's executemany doesn't return row sets for SELECTs, so loop with
-        # a single prepared statement (binds keep the parse tree cached).
+        # A single prepared statement reused per document keeps the parse tree cached.
         sql = f"SELECT PREDICTION({safe} USING :q AS DATA1, :d AS DATA2) FROM dual"
-        for p, d in zip(params, docs, strict=True):
-            cur.execute(sql, p)
+        for d in docs:
+            cur.execute(sql, {"q": query, "d": d})
             row = cur.fetchone()
             score = float(row[0]) if row and row[0] is not None else float("-inf")
             results.append((score, d))

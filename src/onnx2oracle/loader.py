@@ -101,12 +101,7 @@ def upload_model(
     """
     validate_oracle_name(oracle_name)
     logger.info("Connecting to %s ...", dsn.display())
-    conn = oracledb.connect(
-        user=dsn.user,
-        password=dsn.password,
-        dsn=dsn.to_oracle_dsn(),
-        tcp_connect_timeout=30,
-    )
+    conn = dsn.connect()
     try:
         if model_exists(conn, oracle_name):
             if not force:

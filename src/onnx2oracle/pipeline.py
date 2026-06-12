@@ -31,6 +31,7 @@ from onnx2oracle.graph_stages import (
     add_l2_normalization,
     clear_outputs,
     copy_missing_opset_domains,
+    dedupe_opset_imports,
     expose_dynamic_int64_sequence_outputs,
     expose_squeezed_float_output,
     pin_dynamic_batch_to_one,
@@ -266,12 +267,9 @@ def build_augmented(spec: EmbeddingSpec, cache_dir: Path | None = None) -> bytes
     # Fix leftover dynamic batch dims in value_info / inputs
     pin_dynamic_batch_to_one(merged.graph)
 
-    # Serialize
-    with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as tmp:
-        onnx.save(merged, tmp.name)
-        data = Path(tmp.name).read_bytes()
-        Path(tmp.name).unlink()
-    return data
+    # Serialize. The merged proto has no external-data refs (onnx.load inlined
+    # any sidecars), so SerializeToString covers the whole job.
+    return merged.SerializeToString()
 
 
 def _export_cross_encoder_onnx(hf_repo: str, cache_dir: Path | None, out_path: Path) -> None:
@@ -580,20 +578,7 @@ def build_reranker(spec: RerankerSpec, cache_dir: Path | None = None) -> bytes:
     # both sub-graph opset_imports, producing duplicates) and align the default
     # ai.onnx version with the core. Without this the second compose.merge_models
     # call rejects the mismatched domains.
-    seen: dict[str, int] = {}
-    for o in pre_merged.opset_import:
-        if o.domain not in seen:
-            seen[o.domain] = o.version
-        else:
-            seen[o.domain] = max(seen[o.domain], o.version)
-    seen[""] = 18
-    seen["ai.onnx"] = 18
-    while len(pre_merged.opset_import) > 0:
-        pre_merged.opset_import.pop()
-    for domain, version in seen.items():
-        new_o = pre_merged.opset_import.add()
-        new_o.domain = domain
-        new_o.version = version
+    dedupe_opset_imports(pre_merged, pin={"": 18, "ai.onnx": 18})
 
     # 6) Merge tokenizer subgraph + transformer.
     core_input_names = {i.name for i in core_model.graph.input}
@@ -620,8 +605,4 @@ def build_reranker(spec: RerankerSpec, cache_dir: Path | None = None) -> bytes:
     # Pin any leftover dynamic batch dims to 1.
     pin_dynamic_batch_to_one(merged.graph)
 
-    with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as tmp:
-        onnx.save(merged, tmp.name)
-        data = Path(tmp.name).read_bytes()
-        Path(tmp.name).unlink()
-    return data
+    return merged.SerializeToString()
