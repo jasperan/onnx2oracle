@@ -10,6 +10,7 @@
 <script src="assets/main.js" defer></script>
 </head>
 <body>
+<a class="docs-skip" href="#main-content">Skip to content</a>
 
 <header class="topbar">
   <div class="shell topbar-inner">
@@ -36,14 +37,14 @@
   </div>
 </header>
 
-<main>
+<main id="main-content">
 
 <section class="hero shell" aria-labelledby="hero-h">
   <div>
-    <div class="eyebrow">v0.2 — Oracle AI Database</div>
-    <h1 id="hero-h">Embeddings &amp; rerankers that live inside your database.</h1>
+    <div class="eyebrow">THE IN-DATABASE MODEL TOOLKIT</div>
+    <h1 id="hero-h">Your model.<br><em>Inside Oracle.</em></h1>
     <p class="lede">
-      <code>onnx2oracle</code> packages any HuggingFace sentence-embedding model — and now cross-encoder rerankers —
+      <code>onnx2oracle</code> packages supported HuggingFace sentence-embedding models and cross-encoder rerankers
       as an augmented ONNX graph and loads it directly into Oracle via <code>DBMS_VECTOR.LOAD_ONNX_MODEL</code>.
       Embeddings via <code>VECTOR_EMBEDDING</code>, relevance scoring via <code>PREDICTION</code>. No sidecar, no queue, no network hop.
     </p>
@@ -65,9 +66,15 @@
   </div>
 
   <aside aria-label="Three-command demo">
+    <div class="model-artifact" aria-label="One ONNX graph contains tokenization, transformer inference, pooling, and normalization">
+      <div class="artifact-topline"><span>MODEL / PACKAGED FOR ORACLE</span><span>.onnx</span></div>
+      <div class="artifact-title"><span class="artifact-symbol" aria-hidden="true">[o]</span><div><strong>One graph.<br>The full pipeline.</strong><span>From raw text to an SQL-callable model</span></div></div>
+      <ol class="artifact-pipeline"><li><span>01</span>Tokenize</li><li><span>02</span>Transform</li><li><span>03</span>Pool + normalize<small>Embedding models</small></li></ol>
+      <div class="artifact-output"><span>RUN WHERE YOUR DATA LIVES</span><code>SELECT VECTOR_EMBEDDING(…)</code></div>
+    </div>
     <div class="terminal" role="img" aria-label="Terminal showing docker up, load, verify commands">
       <span class="terminal-dots"><span></span><span></span><span></span></span>
-      <span class="terminal-title">~/projects — zsh</span>
+      <span class="terminal-title">Three commands · illustrative output</span>
       <div class="terminal-body">
         <span class="term-line t1"><span class="term-prompt">$ </span><span class="term-cmd">onnx2oracle docker up --wait</span></span>
         <span class="term-line t2"><span class="term-out">&nbsp;&nbsp;Oracle AI Database Free ready on localhost:1521 &nbsp;</span><span class="term-ok">ok</span></span>

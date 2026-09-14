@@ -1,0 +1,262 @@
+html .topbar-inner {
+  padding: 20px 28px;
+}
+html .brand {
+  font-weight: 700;
+  font-size: 19px;
+}
+html .brand-mark {
+  width: 29px;
+  height: 29px;
+  border-radius: 4px;
+  font-size: 16px;
+}
+html .nav {
+  font-size: 12px;
+  gap: 19px;
+}
+html .btn-ghost {
+  min-height: 40px;
+  border-radius: 5px;
+}
+html .hero {
+  grid-template-columns: 1fr 1fr;
+  gap: 65px;
+  padding: 70px 28px 65px;
+  align-items: center;
+}
+html .hero h1 {
+  font-size: clamp(54px, 5.9vw, 82px);
+  letter-spacing: -4px;
+  line-height: 0.99;
+  margin: 24px 0;
+  font-weight: 570;
+}
+html .hero h1 em {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  color: var(--accent);
+}
+html .hero .lede {
+  font-size: 15px;
+  line-height: 1.9;
+  max-width: 49ch;
+}
+html .hero .cta-row {
+  gap: 13px;
+}
+html .btn {
+  min-height: 47px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+html .hero-meta {
+  font-size: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+html .hero aside {
+  min-width: 0;
+}
+html .hero .terminal {
+  border-radius: 0 0 8px 8px;
+  margin-top: 0;
+  box-shadow: none;
+}
+html .hero .terminal-body {
+  font-size: 10px;
+  line-height: 1.9;
+  padding: 19px;
+}
+html .terminal-title {
+  font-size: 9px;
+}
+.docs-skip {
+  position: fixed;
+  left: 20px;
+  top: 15px;
+  padding: 12px 18px;
+  background: var(--ink);
+  color: var(--bg);
+  transform: translateY(-170%);
+  z-index: 60;
+}
+.docs-skip:focus {
+  transform: none;
+}
+.model-artifact {
+  border: 1px solid var(--rule);
+  border-bottom: 0;
+  padding: 24px;
+  border-radius: 8px 8px 0 0;
+  background: var(--bg-elev);
+}
+.artifact-topline {
+  display: flex;
+  justify-content: space-between;
+  font:
+    9px ui-monospace,
+    monospace;
+  color: var(--ink-muted);
+  letter-spacing: 1px;
+}
+.artifact-topline > span + span {
+  color: var(--accent);
+}
+.artifact-title {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin: 29px 0;
+}
+.artifact-symbol {
+  flex-shrink: 0;
+  width: 74px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  font:
+    27px ui-monospace,
+    monospace;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: linear-gradient(135deg, transparent 70%, var(--bg-sunk) 70%);
+}
+.artifact-title strong {
+  font-size: 30px;
+  letter-spacing: -1px;
+  line-height: 1.1;
+  font-weight: 550;
+}
+.artifact-title div > span {
+  display: block;
+  margin-top: 12px;
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+.artifact-pipeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  border-block: 1px solid var(--rule);
+}
+.artifact-pipeline li {
+  flex: 1;
+  padding: 14px 9px;
+  font-size: 11px;
+  color: var(--ink);
+}
+.artifact-pipeline li + li {
+  border-left: 1px solid var(--rule);
+}
+.artifact-pipeline li > span {
+  display: block;
+  color: var(--accent);
+  font:
+    9px ui-monospace,
+    monospace;
+  margin-bottom: 8px;
+}
+.artifact-pipeline small {
+  display: block;
+  font-size: 8px;
+  margin-top: 2px;
+}
+.artifact-output {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 18px;
+}
+.artifact-output > span {
+  font:
+    8px ui-monospace,
+    monospace;
+  letter-spacing: 1px;
+  color: var(--ink-muted);
+}
+.artifact-output > code {
+  font-size: 12px;
+  color: var(--accent);
+}
+html .reasons {
+  padding-top: 45px;
+  padding-bottom: 45px;
+}
+html .reason {
+  padding: 20px 0;
+}
+html table {
+  font-variant-numeric: tabular-nums;
+}
+html .sort-button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 8px 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+html .sort-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 5px;
+}
+@media (max-width: 950px) {
+  html .hero {
+    grid-template-columns: 1fr;
+    padding-top: 45px;
+    gap: 35px;
+  }
+  html .hero .lede {
+    max-width: 65ch;
+  }
+  html .hero h1 {
+    font-size: 68px;
+  }
+  .artifact-title {
+    margin: 24px 0;
+  }
+}
+@media (max-width: 550px) {
+  html .topbar-inner {
+    padding: 16px 22px;
+  }
+  html .topbar-tools {
+    justify-self: end;
+    grid-column: 2;
+    grid-row: 1;
+  }
+  html .topbar .nav {
+    gap: 13px;
+    row-gap: 8px;
+  }
+  html .hero {
+    padding: 42px 22px;
+  }
+  html .hero h1 {
+    font-size: 58px;
+    letter-spacing: -3px;
+  }
+  .model-artifact {
+    padding: 20px;
+  }
+  .artifact-title strong {
+    font-size: 27px;
+  }
+  .artifact-title {
+    gap: 16px;
+  }
+  html .hero .terminal-body {
+    white-space: normal;
+  }
+  .artifact-output > code {
+    font-size: 10px;
+  }
+  html .hero .cta-row {
+    flex-wrap: wrap;
+  }
+}

@@ -27,6 +27,21 @@
 
 No external embedding API, no sidecar serving layer, no PII leaving Oracle.
 
+## Documentation, redesigned
+
+A model-artifact-led entry explains the in-database pipeline before the commands. The existing quickstart, model tables, and CLI guides remain intact, with responsive layouts, light/dark themes, and keyboard-operable table sorting.
+
+![onnx2oracle documentation home](docs/visuals/desktop.jpg)
+
+<details><summary>Light theme · mobile documentation</summary>
+
+![onnx2oracle light documentation theme](docs/visuals/light.jpg)
+<img src="docs/visuals/mobile.jpg" alt="onnx2oracle documentation on mobile" width="320">
+
+</details>
+
+Actual browser captures of the static documentation. Terminal output is illustrative; no model was downloaded and no database operation was performed. [Visual notes](docs/visuals/README.md).
+
 ## Deck at a Glance
 
 > **Full interactive presentation**: open [`docs/presentation.html`](docs/presentation.html) in a browser for all 22 slides with arrow-key navigation, 1-9 jumps, and a light/dark toggle.

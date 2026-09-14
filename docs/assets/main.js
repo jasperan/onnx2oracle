@@ -38,11 +38,17 @@
     document.querySelectorAll('table[data-sortable]').forEach((table) => {
       const headers = table.querySelectorAll('thead th');
       headers.forEach((th, colIdx) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'sort-button';
+        while (th.firstChild) button.appendChild(th.firstChild);
         const mark = document.createElement('span');
         mark.className = 'sort-mark';
         mark.textContent = '↕';
-        th.appendChild(mark);
-        th.addEventListener('click', () => sortTable(table, colIdx, th));
+        mark.setAttribute('aria-hidden', 'true');
+        button.appendChild(mark);
+        th.appendChild(button);
+        button.addEventListener('click', () => sortTable(table, colIdx, th));
       });
     });
   });
