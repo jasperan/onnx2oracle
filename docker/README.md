@@ -17,7 +17,8 @@ First start is slow (3-5 minutes) while the PDB opens. Subsequent starts are ~30
 Credentials (for local use only):
 - System: `system / onnx2oracle`
 - PDB: `FREEPDB1`
-- Listener port: `${ORACLE_PORT:-1521}`
+- Listener port: `${ORACLE_PORT:-1521}`, bound to **127.0.0.1** (local use). Override the publish
+  binding in a copy of `docker-compose.yml` if you deliberately need another host to reach it.
 - DSN: `system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1`
 
 Override the local password before first startup:
