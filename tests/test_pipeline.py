@@ -195,6 +195,10 @@ def test_splice_query_doc_subgraph_produces_bert_pair_layout():
     )
     _splice_query_doc_subgraph(graph)
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 18)])
+    # helper.make_model defaults to the installed onnx release's IR version (13 on onnx 1.22),
+    # which the onnxruntime build resolved for Python 3.10 (1.23.x) cannot load. The splice
+    # behavior under test is IR-independent, so pin a version every supported ORT reads.
+    model.ir_version = 10
     onnx.checker.check_model(model)
 
     sess = ort.InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
