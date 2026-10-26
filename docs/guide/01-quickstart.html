@@ -101,7 +101,7 @@
   adding mean pool + L2 norm
   calling DBMS_VECTOR.LOAD_ONNX_MODEL ... ok
   model registered as ALL_MINILM_L6_V2</code></pre>
-          <p>The first load caches the HuggingFace download under <code>~/.onnx2oracle/cache/</code>. Subsequent runs skip the network.</p>
+          <p>The first load downloads the model from HuggingFace and caches the finished augmented ONNX under <code>~/.onnx2oracle/cache/</code> (set <code>ONNX2ORACLE_CACHE_DIR</code> to move it, or pass <code>--no-cache</code> to skip it). Reloading the same model, for example into another database, skips the build. Then try <code>onnx2oracle embed "hello world" --target local</code> to get a vector back in one round trip.</p>
         </div>
       </div>
 

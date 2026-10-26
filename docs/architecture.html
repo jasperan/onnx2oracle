@@ -214,7 +214,7 @@
     </div>
     <div class="module-card">
       <div class="name">connection.py</div>
-      <div class="responsibility">Resolves a DSN by checking CLI args, env vars, a toml file, the <code>--target local</code> shortcut, and finally an interactive prompt. Returns an <code>OracleConnection</code> record.</div>
+      <div class="responsibility">Resolves a DSN: the <code>--dsn</code> flag, an explicit <code>--target local</code>, the <code>ORACLE_DSN</code> env var, the toml config file, then the implicit local default (or an interactive prompt). Returns a <code>DSN</code> record whose <code>repr</code> never includes the password.</div>
       <div class="deps"><span class="deps-label">deps:</span> oracledb, tomllib</div>
     </div>
     <div class="module-card">
@@ -282,27 +282,27 @@ flowchart TD
     </div>
     <div class="dsn-item">
       <div class="dsn-rank">2</div>
-      <div class="dsn-source">env var</div>
+      <div class="dsn-source">explicit --target</div>
       <div class="arrow">&rarr;</div>
-      <div class="dsn-example">ONNX2ORACLE_DSN</div>
+      <div class="dsn-example">--target local (assumes the Docker setup; beats env and toml when passed)</div>
     </div>
     <div class="dsn-item">
       <div class="dsn-rank">3</div>
-      <div class="dsn-source">toml file</div>
+      <div class="dsn-source">env var</div>
       <div class="arrow">&rarr;</div>
-      <div class="dsn-example">~/.config/onnx2oracle/config.toml</div>
+      <div class="dsn-example">ORACLE_DSN</div>
     </div>
     <div class="dsn-item">
       <div class="dsn-rank">4</div>
-      <div class="dsn-source">--target</div>
+      <div class="dsn-source">toml file</div>
       <div class="arrow">&rarr;</div>
-      <div class="dsn-example">--target local (assumes the Docker setup)</div>
+      <div class="dsn-example">~/.onnx2oracle/config.toml</div>
     </div>
     <div class="dsn-item">
       <div class="dsn-rank">5</div>
-      <div class="dsn-source">prompt</div>
+      <div class="dsn-source">implicit default / prompt</div>
       <div class="arrow">&rarr;</div>
-      <div class="dsn-example">interactive (fallback, only if nothing else matched)</div>
+      <div class="dsn-example">local Docker DSN when nothing is set (the interactive prompt is only reachable when the library is called without a default)</div>
     </div>
   </div>
 

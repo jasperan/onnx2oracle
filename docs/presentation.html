@@ -1037,7 +1037,7 @@ kbd {
       Load any HuggingFace embedding model into Oracle AI Database with one command.
     </p>
     <div class="title-meta reveal">
-      <span class="chip"><span class="chip-dot"></span>v0.1.1 on PyPI</span>
+      <span class="chip"><span class="chip-dot"></span>on PyPI</span>
       <span class="chip">MIT license</span>
       <span class="chip">Oracle AI Database</span>
     </div>
@@ -1266,7 +1266,7 @@ kbd {
       <span class="kicker reveal">Stage 1 &mdash; download</span>
       <h2 class="heading reveal">Pull the raw ONNX from HuggingFace.</h2>
       <p class="sub reveal">
-        The sentence-transformers repos already ship an ONNX export of the core transformer. No conversion needed at this step. The loader caches under <code>~/.onnx2oracle/</code> so repeat loads are instant.
+        The sentence-transformers repos already ship an ONNX export of the core transformer. No conversion needed at this step. The downloads land in the standard HuggingFace cache, and the finished augmented ONNX is cached under <code>~/.onnx2oracle/cache/</code> (skip with <code>--no-cache</code>), so repeat loads skip the build.
       </p>
       <ul class="reveal">
         <li>MiniLM-L6 is ~90 MB; mpnet-base is ~420 MB; nomic is ~540 MB</li>
@@ -1279,7 +1279,6 @@ kbd {
 path = <span class="f">hf_hub_download</span>(
     repo_id=<span class="s">"sentence-transformers/all-MiniLM-L6-v2"</span>,
     filename=<span class="s">"onnx/model.onnx"</span>,
-    cache_dir=<span class="s">"~/.onnx2oracle/hf_cache"</span>,
 )
 
 <span class="c"># ~90 MB on disk, ready for stage 2</span>
@@ -1568,6 +1567,12 @@ merged = compose.<span class="f">merge_models</span>(
       </li>
       <li>
         <div>
+          <strong>--target local (explicit)</strong>
+          <span>Docker-compose defaults (user=system, pw=$ORACLE_PWD or onnx2oracle, port=$ORACLE_PORT or 1521). Beats the environment and config file when you type it.</span>
+        </div>
+      </li>
+      <li>
+        <div>
           <strong>$ORACLE_DSN</strong>
           <span>Environment variable, standard Oracle convention.</span>
         </div>
@@ -1575,19 +1580,13 @@ merged = compose.<span class="f">merge_models</span>(
       <li>
         <div>
           <strong>~/.onnx2oracle/config.toml</strong>
-          <span>Per-user profile with named targets.</span>
+          <span>Per-user profile (<code>[default] dsn</code>).</span>
         </div>
       </li>
       <li>
         <div>
-          <strong>--target local</strong>
-          <span>Docker-compose defaults (user=racing, pw=racing, port=1521).</span>
-        </div>
-      </li>
-      <li>
-        <div>
-          <strong>Interactive prompt</strong>
-          <span>Last resort when nothing else matched.</span>
+          <strong>Implicit local default</strong>
+          <span>With nothing set, the CLI falls back to the local Docker DSN.</span>
         </div>
       </li>
     </ol>

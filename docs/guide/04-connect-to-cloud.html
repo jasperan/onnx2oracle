@@ -85,7 +85,7 @@
         <div class="step-num">03</div>
         <div>
           <h3>Or put it in the env</h3>
-          <p>DSN resolution walks <code>--dsn</code> → <code>ORACLE_DSN</code> → <code>~/.onnx2oracle/config.toml</code> → local. Shell-wide exports win over CI flags only if you forget the flag.</p>
+          <p>DSN resolution walks <code>--dsn</code> → an explicit <code>--target local</code> → <code>ORACLE_DSN</code> → <code>~/.onnx2oracle/config.toml</code> → the local Docker default (or a prompt). An exported <code>ORACLE_DSN</code> therefore applies to every command unless you override it with <code>--dsn</code> or an explicit <code>--target local</code>.</p>
           <pre><code>$ export ORACLE_DSN='admin/YourStrongPass@(description=...)'
 $ onnx2oracle load all-MiniLM-L6-v2
 $ onnx2oracle verify</code></pre>

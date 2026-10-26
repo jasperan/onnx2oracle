@@ -32,7 +32,9 @@ If another container already owns port 1521, choose a free host port:
 
     export ORACLE_PORT=1524
 
-`--target local` uses the same port value.
+`--target local` uses the same port value. When you type `--target local` it wins over `ORACLE_DSN`
+and `~/.onnx2oracle/config.toml`, so a stray environment variable cannot redirect a local run (or
+`scripts/check_model_compatibility.py`, which force-drops models) onto another database.
 
 Run the full real-DB evidence loop from the repo root:
 

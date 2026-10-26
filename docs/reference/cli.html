@@ -60,13 +60,13 @@
 
     <h2 id="info">Info commands</h2>
     <pre><code>onnx2oracle version
-onnx2oracle presets</code></pre>
-    <p><code>version</code> prints the package version. <code>presets</code> prints the five registered models with their Oracle names, HF repos, and dimensions.</p>
+onnx2oracle presets [--json]</code></pre>
+    <p><code>version</code> prints the package version. <code>presets</code> prints every registered preset (embedding and reranker) with its Oracle name, HF repo, and dimensions. <code>--json</code> prints a machine-readable array of objects with <code>name</code>, <code>hf_repo</code>, <code>task</code>, <code>pooling</code>, <code>dims</code>, <code>max_length</code>, <code>normalize</code>, <code>oracle_name</code>, and <code>approx_size_mb</code> (rerankers have <code>null</code> pooling, dims, and normalize). Other tools, like the Go TUI, consume this instead of scraping the table.</p>
 
     <h2 id="load">load</h2>
     <p>The primary command. Three shapes — embedding preset, reranker preset, or HuggingFace repo (with <code>--task</code> to pick the pipeline shape).</p>
     <pre><code>onnx2oracle load &lt;preset&gt; [--target local | --dsn user/pw@host:port/service]
-                         [--force] [--name ORACLE_NAME] [--cache-dir PATH]
+                         [--force] [--name ORACLE_NAME] [--cache-dir PATH] [--no-cache]
 
 onnx2oracle load --from-huggingface &lt;hf/repo&gt; --task embedding --pooling {mean,cls}
                  [--normalize/--no-normalize] [--max-length 512]
@@ -81,14 +81,15 @@ onnx2oracle load --from-huggingface &lt;cross-encoder/...&gt; --task reranker
     <table>
       <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td class="mono">&lt;preset&gt;</td><td>One of the registered presets (5 embedding + 2 reranker). <code>onnx2oracle presets</code> shows the list and which task each one is.</td></tr>
+        <tr><td class="mono">&lt;preset&gt;</td><td>One of the registered presets. <code>onnx2oracle presets</code> shows the list and which task each one is. With a preset, <code>--pooling</code>, <code>--dims</code>, <code>--normalize/--no-normalize</code>, and <code>--max-length</code> are rejected (exit 2) because the preset already fixes them.</td></tr>
         <tr><td class="mono">--from-huggingface</td><td>Alternative to preset. Fully-qualified HF repo (e.g. <code>BAAI/bge-large-en-v1.5</code> or <code>cross-encoder/ms-marco-MiniLM-L-6-v2</code>).</td></tr>
         <tr><td class="mono">--task</td><td><code>embedding</code> (default) or <code>reranker</code>. Determines the pipeline shape and the metadata sent to <code>LOAD_ONNX_MODEL</code> (<code>function:"embedding"</code> vs <code>function:"regression"</code>). When a preset is named, its task overrides this flag.</td></tr>
-        <tr><td class="mono">--target local</td><td>Use the local Docker DSN <code>system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1</code>.</td></tr>
+        <tr><td class="mono">--target local</td><td>Use the local Docker DSN <code>system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1</code>. When passed explicitly it beats <code>ORACLE_DSN</code> and <code>config.toml</code>; only <code>--dsn</code> beats it.</td></tr>
         <tr><td class="mono">--dsn</td><td>Explicit connection string. See <a href="#dsn">DSN resolution</a>.</td></tr>
-        <tr><td class="mono">--force</td><td>Drop and reload if the model name already exists in <code>user_mining_models</code>.</td></tr>
+        <tr><td class="mono">--force</td><td>Drop and reload if the model name already exists in <code>user_mining_models</code>. <strong>Not atomic:</strong> the build runs first, but the old model is dropped before <code>LOAD_ONNX_MODEL</code> runs, so if Oracle rejects the upload the previous model stays deleted (the error says so). Without <code>--force</code>, <code>load</code> checks the registered model before building anything: an existing model of the same task is skipped (exit 0), one of a different task is an error.</td></tr>
         <tr><td class="mono">--name</td><td>Override the Oracle mining-model identifier. Required for <code>--from-huggingface</code>.</td></tr>
-        <tr><td class="mono">--cache-dir</td><td>Where to cache the HuggingFace download. Defaults to <code>~/.onnx2oracle/cache</code>.</td></tr>
+        <tr><td class="mono">--cache-dir</td><td>HuggingFace <em>download</em> cache directory, forwarded to the HF hub. Defaults to the standard HF hub cache (<code>HF_HOME</code>, <code>~/.cache/huggingface</code>).</td></tr>
+        <tr><td class="mono">--no-cache</td><td>Skip the built-ONNX cache: do not read or write <code>~/.onnx2oracle/cache/</code> (the HF download cache is unaffected). By default the final augmented ONNX is cached there, keyed by the spec, onnx2oracle version, and dependency versions, and is written only after a local onnxruntime self-check passes, so repeat loads skip the build. Set <code>ONNX2ORACLE_CACHE_DIR</code> to use a different directory.</td></tr>
         <tr><td class="mono">--pooling</td><td><code>mean</code> or <code>cls</code>. Embedding custom loads only — presets encode this; ignored for reranker loads.</td></tr>
         <tr><td class="mono">--normalize / --no-normalize</td><td>Append L2 normalization. Embedding only. Default on.</td></tr>
         <tr><td class="mono">--max-length</td><td>Token truncation limit. Default 512.</td></tr>
@@ -102,9 +103,14 @@ onnx2oracle load --from-huggingface &lt;cross-encoder/...&gt; --task reranker
     <p>Exit code 0 means the target is ready for <code>DBMS_VECTOR.LOAD_ONNX_MODEL</code>. Non-zero output names the missing package, function, privilege, or catalog view.</p>
 
     <h2 id="verify">verify</h2>
-    <pre><code>onnx2oracle verify [--target local | --dsn ...] [--name ORACLE_NAME]</code></pre>
-    <p>Auto-detects the model's task by reading <code>user_mining_models.mining_function</code>. For embedding models, runs <code>VECTOR_EMBEDDING</code>, asserts shape and L2 norm, and runs a cosine-sanity check (<code>king/queen</code> &gt; <code>king/banana</code>). For reranker models (<code>function = REGRESSION</code>), runs <code>PREDICTION</code> on a known-relevant and known-irrelevant pair and asserts <code>relevant &gt; irrelevant</code>.</p>
-    <p>Exit code 0 on success, non-zero otherwise.</p>
+    <pre><code>onnx2oracle verify [--target local | --dsn ...] [--name ORACLE_NAME]
+                   [--expect-dims N] [--normalize/--no-normalize]</code></pre>
+    <p>Auto-detects the model's task by reading <code>user_mining_models.mining_function</code>. For embedding models, runs <code>VECTOR_EMBEDDING</code> and fails unless the dimension equals the expected one, the L2 norm is finite and within 1e-3 of 1.0, and the cosine-sanity check holds (<code>king/queen</code> &gt; <code>king/banana</code>). <code>--expect-dims</code> sets the expected dimension; it defaults to the preset's dimension when <code>--name</code> is a preset's Oracle name. <code>--no-normalize</code> skips the norm check for models loaded without L2 normalization. For reranker models (<code>function = REGRESSION</code>), runs <code>PREDICTION</code> on a known-relevant and known-irrelevant pair and asserts <code>relevant &gt; irrelevant</code>.</p>
+    <p>Exit code 0 on success, non-zero otherwise. Database errors are reported as an <code>Error:</code> line, not a traceback.</p>
+
+    <h2 id="embed">embed</h2>
+    <pre><code>onnx2oracle embed TEXT... [--name ORACLE_NAME] [--target local | --dsn ...] [--json]</code></pre>
+    <p>Embeds one or more texts with a registered embedding model (default <code>ALL_MINILM_L6_V2</code>) in a single round trip: all texts are bound into one <code>SELECT VECTOR_EMBEDDING(model USING t AS DATA)</code>. By default it prints a table with the dimension and L2 norm of each text; <code>--json</code> prints an array of <code>{text, dims, norm, embedding}</code> objects to stdout. Exit code 1 if the model is missing, is a reranker, or returns a NULL embedding.</p>
 
     <h2 id="rerank">rerank</h2>
     <pre><code>onnx2oracle rerank --name ORACLE_NAME --query "..." --doc "doc1" [--doc "doc2" ...]
@@ -126,11 +132,9 @@ onnx2oracle docker logs [-f]</code></pre>
     <h2 id="config">config</h2>
     <pre><code>onnx2oracle config show
 onnx2oracle config set key=value</code></pre>
-    <p><code>show</code> dumps the effective TOML at <code>~/.onnx2oracle/config.toml</code>. <code>set</code> writes a single key. Typical keys:</p>
+    <p><code>show</code> prints the parsed <code>~/.onnx2oracle/config.toml</code> (comments omitted) with the <code>dsn</code> password and any password/token/secret/api-key-like value masked as <code>***</code>; invalid TOML is an error (exit 1). <code>set</code> writes a single key under <code>[default]</code> (key must match <code>[A-Za-z0-9_-]+</code>, the value is TOML-escaped, an existing key is replaced), writes atomically with file mode 0600 (directory 0700), and refuses to write a result that would not parse. The key that is read today:</p>
     <ul>
-      <li><code>dsn</code> — persistent DSN in the <code>[default]</code> table; wins over <code>--target local</code> but loses to <code>--dsn</code> and <code>ORACLE_DSN</code>.</li>
-      <li><code>cache_dir</code> — override <code>~/.onnx2oracle/cache</code>.</li>
-      <li><code>hf_token</code> — persisted HuggingFace token (prefer <code>HF_TOKEN</code> env if you don't want it on disk).</li>
+      <li><code>dsn</code> — persistent DSN in the <code>[default]</code> table; loses to <code>--dsn</code>, an explicit <code>--target local</code>, and <code>ORACLE_DSN</code>.</li>
     </ul>
 
     <h2 id="dsn">DSN resolution</h2>
@@ -139,10 +143,10 @@ onnx2oracle config set key=value</code></pre>
       <thead><tr><th>#</th><th>Source</th><th>Example</th></tr></thead>
       <tbody>
         <tr><td class="mono">1</td><td><code>--dsn</code> flag</td><td class="mono">--dsn admin/pw@...</td></tr>
-        <tr><td class="mono">2</td><td><code>ORACLE_DSN</code> env var</td><td class="mono">export ORACLE_DSN=...</td></tr>
-        <tr><td class="mono">3</td><td><code>~/.onnx2oracle/config.toml</code> <code>dsn</code> in <code>[default]</code></td><td class="mono">config set dsn=...</td></tr>
-        <tr><td class="mono">4</td><td><code>--target local</code></td><td class="mono">system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1</td></tr>
-        <tr><td class="mono">5</td><td>Interactive prompt</td><td class="mono">CLI asks stdin</td></tr>
+        <tr><td class="mono">2</td><td>Explicit <code>--target local</code></td><td class="mono">system/${ORACLE_PWD:-onnx2oracle}@localhost:${ORACLE_PORT:-1521}/FREEPDB1</td></tr>
+        <tr><td class="mono">3</td><td><code>ORACLE_DSN</code> env var</td><td class="mono">export ORACLE_DSN=...</td></tr>
+        <tr><td class="mono">4</td><td><code>~/.onnx2oracle/config.toml</code> <code>dsn</code> in <code>[default]</code></td><td class="mono">config set dsn=...</td></tr>
+        <tr><td class="mono">5</td><td>Implicit local default / interactive prompt</td><td class="mono">Oracle-bound commands fall back to the local Docker DSN when nothing above is set; otherwise the CLI asks stdin</td></tr>
       </tbody>
     </table>
 
