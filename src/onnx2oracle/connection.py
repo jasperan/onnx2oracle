@@ -1,4 +1,4 @@
-"""DSN resolution: CLI > env > config file > target shortcut > interactive prompt."""
+"""DSN resolution: CLI --dsn > explicit --target > env > config file > implicit local default > prompt."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ DEFAULT_CONFIG_PATH = Path.home() / ".onnx2oracle" / "config.toml"
 DEFAULT_LOCAL_PASSWORD = "onnx2oracle"
 DEFAULT_LOCAL_PORT = 1521
 DEFAULT_CONNECT_TIMEOUT = 30
+_MALFORMED_DSN_MESSAGE = "Malformed DSN (expected user/password@host:port/service)"
 
 
 @dataclass(frozen=True)
@@ -39,7 +40,7 @@ class DSN:
         # the right so Easy Connect strings still parse when passwords contain @.
         m = re.match(r"^(?P<user>[^/]+)/(?P<rest>.+)$", raw)
         if not m:
-            raise ValueError(f"Malformed DSN: {raw!r}")
+            raise ValueError(_MALFORMED_DSN_MESSAGE)
         user = m.group("user")
         rest = m.group("rest")
         idx = rest.rfind("@")
@@ -67,7 +68,12 @@ class DSN:
                 service="",
                 connect_string=connect_string,
             )
-        raise ValueError(f"Malformed DSN: {raw!r}")
+        raise ValueError(_MALFORMED_DSN_MESSAGE)
+
+    def __repr__(self) -> str:
+        return f"DSN({self.display()})"
+
+    __str__ = __repr__
 
     def to_oracle_dsn(self) -> str:
         """Return the host:port/service string for python-oracledb's connect()."""
@@ -119,14 +125,18 @@ def resolve_dsn(
     interactive: bool = True,
     default_local: bool = False,
 ) -> DSN:
-    """Resolve a DSN in precedence order: CLI > env > config file > target > prompt.
+    """Resolve a DSN in precedence order.
 
-    When *default_local* is set and none of CLI/env/config supply a DSN, the
-    ``--target local`` docker-compose shortcut is used (so the zero-config flow
-    works without an explicit ``--target``).
+    ``--dsn`` always wins. An explicitly requested *target* (``"local"``) comes
+    next, so ``--target local`` is never silently redirected by ``ORACLE_DSN`` or
+    the config file. Without an explicit target: env > config file, then, when
+    *default_local* is set, the local docker-compose shortcut (so the zero-config
+    flow works), then an interactive prompt.
     """
     if cli_dsn:
         return DSN.parse(cli_dsn)
+    if target == "local":
+        return _local_dsn()
     env = os.environ.get("ORACLE_DSN")
     if env:
         return DSN.parse(env)
@@ -134,7 +144,7 @@ def resolve_dsn(
         data = tomllib.loads(config_path.read_text(encoding="utf-8"))
         if "default" in data and "dsn" in data["default"]:
             return DSN.parse(data["default"]["dsn"])
-    if target == "local" or (default_local and target is None):
+    if default_local and target is None:
         return _local_dsn()
     if interactive and sys.stdin.isatty():
         print("No DSN resolved. Enter connection details:")

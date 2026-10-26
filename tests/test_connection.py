@@ -109,3 +109,55 @@ def test_parse_adb_descriptor_passes_connect_string_through():
     assert dsn.password == "oracle@123!"
     assert dsn.to_oracle_dsn() == descriptor
     assert dsn.display() == "admin@<connect-descriptor>"
+
+
+def test_explicit_target_local_overrides_env_dsn(monkeypatch, tmp_path):
+    monkeypatch.setenv("ORACLE_DSN", "envuser/envpw@remote.example.com:1522/ENV")
+    monkeypatch.setenv("ORACLE_PWD", "localpw")
+    monkeypatch.setenv("ORACLE_PORT", "1555")
+    dsn = resolve_dsn(cli_dsn=None, target="local", config_path=tmp_path / "nope.toml")
+    assert (dsn.user, dsn.host, dsn.port, dsn.password) == ("system", "localhost", 1555, "localpw")
+
+
+def test_explicit_target_local_overrides_config_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("ORACLE_DSN", raising=False)
+    monkeypatch.delenv("ORACLE_PORT", raising=False)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('[default]\ndsn = "u/p@remote.example.com:1523/SVC"\n')
+    dsn = resolve_dsn(cli_dsn=None, target="local", config_path=cfg)
+    assert dsn.host == "localhost"
+
+
+def test_cli_dsn_still_beats_explicit_target(monkeypatch, tmp_path):
+    monkeypatch.delenv("ORACLE_DSN", raising=False)
+    dsn = resolve_dsn(cli_dsn="u/p@dbhost:1521/SVC", target="local", config_path=tmp_path / "nope.toml")
+    assert dsn.host == "dbhost"
+
+
+def test_implicit_default_local_still_prefers_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("ORACLE_DSN", "envuser/envpw@envhost:1522/ENV")
+    dsn = resolve_dsn(cli_dsn=None, target=None, config_path=tmp_path / "nope.toml", default_local=True)
+    assert dsn.host == "envhost"
+
+
+def test_repr_and_str_hide_password():
+    dsn = DSN.parse("system/S3cr3t-pw!@localhost:1521/FREEPDB1")
+    for rendered in (repr(dsn), str(dsn), f"{dsn}", f"{dsn!r}", repr([dsn])):
+        assert "S3cr3t-pw" not in rendered
+        assert "system" in rendered
+    assert dsn.password == "S3cr3t-pw!"
+
+
+def test_malformed_dsn_error_hides_password():
+    for raw in ("user/S3cr3t-pw-no-host", "S3cr3t-pw-no-slash"):
+        with pytest.raises(ValueError) as exc:
+            DSN.parse(raw)
+        assert "S3cr3t" not in str(exc.value)
+        assert "expected user/password@host:port/service" in str(exc.value)
+
+
+def test_malformed_dsn_from_env_hides_password(monkeypatch, tmp_path):
+    monkeypatch.setenv("ORACLE_DSN", "user/S3cr3t-pw-no-host")
+    with pytest.raises(ValueError) as exc:
+        resolve_dsn(cli_dsn=None, target=None, config_path=tmp_path / "nope.toml")
+    assert "S3cr3t" not in str(exc.value)

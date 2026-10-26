@@ -20,13 +20,13 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-import oracledb  # noqa: E402
-
 from onnx2oracle.connection import resolve_dsn  # noqa: E402
 from onnx2oracle.loader import drop_model, model_exists, upload_model  # noqa: E402
 from onnx2oracle.pipeline import build_augmented, build_reranker  # noqa: E402
 from onnx2oracle.presets import PRESETS, EmbeddingSpec, RerankerSpec, get_preset  # noqa: E402
 from onnx2oracle.verify import smoke_test  # noqa: E402
+
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def _utc_now() -> str:
@@ -46,8 +46,16 @@ def _write_record(path: Path, record: dict[str, Any]) -> None:
     print(line, flush=True)
 
 
+def _preexisting_model(dsn, oracle_name: str) -> bool:
+    conn = dsn.connect()
+    try:
+        return model_exists(conn, oracle_name)
+    finally:
+        conn.close()
+
+
 def _cleanup_model(dsn, oracle_name: str) -> None:
-    conn = oracledb.connect(user=dsn.user, password=dsn.password, dsn=dsn.to_oracle_dsn(), tcp_connect_timeout=30)
+    conn = dsn.connect()
     try:
         if model_exists(conn, oracle_name):
             drop_model(conn, oracle_name)
@@ -55,7 +63,8 @@ def _cleanup_model(dsn, oracle_name: str) -> None:
         conn.close()
 
 
-def _check_preset(name: str, dsn, output: Path, keep_model: bool) -> bool:
+def _check_preset(name: str, dsn, output: Path, keep_model: bool) -> str:
+    """Return ``"passed"``, ``"failed"`` or ``"skipped"``."""
     spec = get_preset(name)
     started = time.perf_counter()
     base: dict[str, Any] = {
@@ -75,13 +84,24 @@ def _check_preset(name: str, dsn, output: Path, keep_model: bool) -> bool:
             "normalize": spec.normalize,
         })
 
+    # Only models created by this run may be dropped; never touch a pre-existing one.
+    created = False
     try:
+        if _preexisting_model(dsn, spec.oracle_name):
+            print(
+                f"model {spec.oracle_name} already exists on {dsn.display()}; skipping (not overwriting or dropping)",
+                file=sys.stderr,
+                flush=True,
+            )
+            _write_record(output, {**base, "status": "skipped", "reason": "model_already_exists"})
+            return "skipped"
+        created = True
         if isinstance(spec, EmbeddingSpec):
             data = build_augmented(spec)
-            upload_model(dsn, data, spec.oracle_name, force=True, task="embedding")
+            upload_model(dsn, data, spec.oracle_name, force=False, task="embedding")
         elif isinstance(spec, RerankerSpec):
             data = build_reranker(spec)
-            upload_model(dsn, data, spec.oracle_name, force=True, task="reranker")
+            upload_model(dsn, data, spec.oracle_name, force=False, task="reranker")
         else:
             raise TypeError(f"Unsupported preset spec type: {type(spec).__name__}")
 
@@ -105,7 +125,7 @@ def _check_preset(name: str, dsn, output: Path, keep_model: bool) -> bool:
             },
         }
         _write_record(output, record)
-        return ok
+        return "passed" if ok else "failed"
     except Exception as exc:
         _write_record(
             output,
@@ -118,9 +138,9 @@ def _check_preset(name: str, dsn, output: Path, keep_model: bool) -> bool:
                 "traceback": traceback.format_exc(limit=8),
             },
         )
-        return False
+        return "failed"
     finally:
-        if not keep_model:
+        if created and not keep_model:
             try:
                 _cleanup_model(dsn, spec.oracle_name)
             except Exception as exc:
@@ -143,6 +163,11 @@ def main() -> int:
     parser.add_argument("--dsn", help="Explicit DSN: user/pw@host:port/service.")
     parser.add_argument("--output", type=Path, default=_default_output(), help="JSONL evidence output path.")
     parser.add_argument("--keep-models", action="store_true", help="Leave loaded models in Oracle after the run.")
+    parser.add_argument(
+        "--allow-remote",
+        action="store_true",
+        help="Allow running against a DSN whose host is not localhost/127.0.0.1.",
+    )
     args = parser.parse_args()
 
     names = list(PRESETS) if args.all_presets else args.presets or ["all-MiniLM-L6-v2"]
@@ -152,6 +177,13 @@ def main() -> int:
 
     os.environ.setdefault("ORACLE_PWD", "onnx2oracle")
     dsn = resolve_dsn(cli_dsn=args.dsn, target=args.target, interactive=False)
+    if dsn.host.lower() not in LOCAL_HOSTS and not args.allow_remote:
+        print(
+            f"Refusing to run against non-local target {dsn.display()}: this script loads and drops models. "
+            "Pass --allow-remote to override.",
+            file=sys.stderr,
+        )
+        return 2
 
     _write_record(
         args.output,
@@ -163,18 +195,20 @@ def main() -> int:
         },
     )
     results = [_check_preset(name, dsn, args.output, args.keep_models) for name in names]
-    passed = sum(1 for result in results if result)
+    passed = results.count("passed")
+    failed = results.count("failed")
     _write_record(
         args.output,
         {
             "event": "run_finish",
             "finished_at": _utc_now(),
             "passed": passed,
-            "failed": len(results) - passed,
+            "failed": failed,
+            "skipped": results.count("skipped"),
             "output": str(args.output),
         },
     )
-    return 0 if all(results) else 1
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
