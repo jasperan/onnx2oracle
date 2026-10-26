@@ -48,7 +48,7 @@ func (e ShellExec) Run(inv run.Invocation, timeout time.Duration) (string, error
 		if _, lookErr := exec.LookPath(inv.Argv[0]); lookErr != nil {
 			return text, fmt.Errorf("%s not found on PATH: %w", inv.Argv[0], lookErr)
 		}
-		return text, fmt.Errorf("%s", firstLine(text, err))
+		return text, fmt.Errorf("%s", failureLine(text, err))
 	}
 	return text, nil
 }
@@ -58,11 +58,12 @@ func (e ShellExec) Run(inv run.Invocation, timeout time.Duration) (string, error
 // "raise TypeError(message)", which is a code frame and not the failure.
 var errorLine = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*(Error|Exception)\s*:`)
 
-// firstLine prefers the CLI's own error message, which is far more useful than
-// "exit status 1". Rich-formatted output is box drawn, so borders are skipped,
-// and a real exception header wins over a status line.
-func firstLine(output string, err error) string {
-	fallback := ""
+// failureLine prefers the CLI's own error message, which is far more useful than
+// "exit status 1". Rich-formatted output is box drawn, so borders are skipped.
+// A real exception header wins; with no traceback, the last non-empty line is
+// the failure, because the CLI prints its error after any progress output.
+func failureLine(output string, err error) string {
+	last := ""
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		s := strings.TrimSpace(stripANSI(line))
 		s = strings.Trim(s, "│┃ ")
@@ -73,12 +74,10 @@ func firstLine(output string, err error) string {
 		if errorLine.MatchString(s) {
 			return s
 		}
-		if fallback == "" {
-			fallback = s
-		}
+		last = s
 	}
-	if fallback != "" {
-		return fallback
+	if last != "" {
+		return last
 	}
 	return err.Error()
 }

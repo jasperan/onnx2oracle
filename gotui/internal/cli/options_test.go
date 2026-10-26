@@ -33,6 +33,15 @@ func TestResolveDefaultsComeFromConnectionPy(t *testing.T) {
 	}
 }
 
+// A garbage ORACLE_PORT must fail like connection.py, not silently use 1521.
+func TestResolveRejectsInvalidOraclePort(t *testing.T) {
+	t.Setenv(dsn.EnvPort, "not-a-port")
+	_, err := Resolve(Options{Preset: "all-MiniLM-L6-v2"})
+	if err == nil || !strings.Contains(err.Error(), dsn.EnvPort) {
+		t.Fatalf("Resolve error = %v, want it to name %s", err, dsn.EnvPort)
+	}
+}
+
 func TestResolveFlagsOverrideDefaults(t *testing.T) {
 	p, err := Resolve(Options{
 		User: "admin", Password: "pw", Host: "db.example.com", Port: "1600", Service: "MYPDB1",

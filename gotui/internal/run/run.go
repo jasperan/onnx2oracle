@@ -39,7 +39,7 @@ func envWithDSN(d dsn.DSN) []string {
 		}
 		out = append(out, kv)
 	}
-	return append(out, fmt.Sprintf("%s=%s", dsn.EnvDSN, d.String()))
+	return append(out, fmt.Sprintf("%s=%s", dsn.EnvDSN, d.ConnectionString()))
 }
 
 // LoadRequest mirrors the options of `onnx2oracle load`.

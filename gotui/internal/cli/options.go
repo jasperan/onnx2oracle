@@ -52,7 +52,10 @@ func Resolve(o Options) (Plan, error) {
 			return Plan{}, err
 		}
 	default:
-		d = dsn.Local()
+		d, err = dsn.Local()
+		if err != nil {
+			return Plan{}, err
+		}
 		if o.User != "" {
 			d.User = o.User
 		}

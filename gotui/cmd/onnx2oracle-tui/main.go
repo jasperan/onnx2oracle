@@ -82,7 +82,11 @@ func realMain() int {
 		return 1
 	}
 
-	seed := seedFromOptions(opts)
+	seed, err := seedFromOptions(opts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
 	m := tui.New(tui.Options{
 		Presets: got,
 		Exec:    tui.ShellExec{},
@@ -100,13 +104,16 @@ func realMain() int {
 // seedFromOptions pre-fills the wizard from the flags so a user who already
 // knows their target does not retype it. It is a convenience only: the wizard
 // still validates everything.
-func seedFromOptions(o cli.Options) dsn.DSN {
+func seedFromOptions(o cli.Options) (dsn.DSN, error) {
 	if o.DSN != "" {
 		if d, err := dsn.Parse(o.DSN); err == nil {
-			return d
+			return d, nil
 		}
 	}
-	d := dsn.Local()
+	d, err := dsn.Local()
+	if err != nil {
+		return dsn.DSN{}, err
+	}
 	if o.User != "" {
 		d.User = o.User
 	}
@@ -124,7 +131,7 @@ func seedFromOptions(o cli.Options) dsn.DSN {
 			d.Port = p
 		}
 	}
-	return d
+	return d, nil
 }
 
 // runNonInteractive resolves flags and environment with no terminal at all.

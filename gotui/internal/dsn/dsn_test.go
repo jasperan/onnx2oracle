@@ -1,18 +1,28 @@
 package dsn
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 )
 
-func TestLocalDefaults(t *testing.T) {
-	t.Setenv(EnvPort, "")
-	t.Setenv(EnvPwd, "")
-	t.Setenv(EnvPort, "1521")
+// mustLocal returns the local target with a clean environment, so tests do not
+// depend on the developer's ORACLE_PORT / ORACLE_PWD.
+func mustLocal(t *testing.T) DSN {
+	t.Helper()
+	t.Setenv(EnvPort, "1521") // registers restoration of the original value
 	os.Unsetenv(EnvPort)
+	t.Setenv(EnvPwd, "")
+	got, err := Local()
+	if err != nil {
+		t.Fatalf("Local: %v", err)
+	}
+	return got
+}
 
-	got := Local()
+func TestLocalDefaults(t *testing.T) {
+	got := mustLocal(t)
 	if got.User != "system" || got.Host != "localhost" || got.Port != 1521 || got.Service != "FREEPDB1" {
 		t.Fatalf("Local() = %+v, want the connection.py local defaults", got)
 	}
@@ -24,9 +34,23 @@ func TestLocalDefaults(t *testing.T) {
 func TestLocalHonoursEnv(t *testing.T) {
 	t.Setenv(EnvPort, "1600")
 	t.Setenv(EnvPwd, "s3cret")
-	got := Local()
+	got, err := Local()
+	if err != nil {
+		t.Fatalf("Local: %v", err)
+	}
 	if got.Port != 1600 || got.Password != "s3cret" {
 		t.Fatalf("Local() = %+v, want port 1600 and the env password", got)
+	}
+}
+
+// connection.py raises on a non-integer ORACLE_PORT; falling back to 1521 would
+// silently connect to the wrong database.
+func TestLocalRejectsInvalidPort(t *testing.T) {
+	for _, raw := range []string{"abc", "15 21", "", "1521.5"} {
+		t.Setenv(EnvPort, raw)
+		if _, err := Local(); err == nil {
+			t.Errorf("Local() with %s=%q = nil error, want a rejection", EnvPort, raw)
+		}
 	}
 }
 
@@ -71,7 +95,7 @@ func TestParseRejectsMalformed(t *testing.T) {
 }
 
 func TestValidateRejections(t *testing.T) {
-	base := Local()
+	base := mustLocal(t)
 	cases := map[string]func(DSN) DSN{
 		"empty user":    func(d DSN) DSN { d.User = "  "; return d },
 		"empty pass":    func(d DSN) DSN { d.Password = ""; return d },
@@ -101,26 +125,51 @@ func TestValidateSkipsTopologyForDescriptor(t *testing.T) {
 }
 
 func TestOracleDSNShape(t *testing.T) {
-	got := Local()
+	got := mustLocal(t)
 	if want := "localhost:1521/FREEPDB1"; got.OracleDSN() != want {
 		t.Errorf("OracleDSN() = %q, want %q", got.OracleDSN(), want)
 	}
 }
 
-func TestStringRoundTripsThroughParse(t *testing.T) {
-	orig := DSN{User: "system", Password: "pw", Host: "h", Port: 1521, Service: "FREEPDB1"}
-	back, err := Parse(orig.String())
-	if err != nil {
-		t.Fatalf("Parse(String()): %v", err)
-	}
-	if back != orig {
-		t.Fatalf("round trip = %+v, want %+v", back, orig)
+func TestConnectionStringRoundTripsThroughParse(t *testing.T) {
+	for _, orig := range []DSN{
+		{User: "system", Password: "pw", Host: "h", Port: 1521, Service: "FREEPDB1"},
+		{User: "system", Password: "p@ss", Host: "mydb_high", ConnectString: "mydb_high"},
+	} {
+		back, err := Parse(orig.ConnectionString())
+		if err != nil {
+			t.Fatalf("Parse(ConnectionString()): %v", err)
+		}
+		if back != orig {
+			t.Fatalf("round trip = %+v, want %+v", back, orig)
+		}
 	}
 }
 
-func TestDisplayHidesPassword(t *testing.T) {
-	d := DSN{User: "system", Password: "topsecret", Host: "localhost", Port: 1521, Service: "FREEPDB1"}
-	if got := d.Display(); strings.Contains(got, "topsecret") {
-		t.Errorf("Display() = %q, must not leak the password", got)
+// Anything that formats a DSN with %v / %s / %+v must stay free of the password.
+func TestStringAndDisplayHidePassword(t *testing.T) {
+	for _, d := range []DSN{
+		{User: "system", Password: "topsecret", Host: "localhost", Port: 1521, Service: "FREEPDB1"},
+		{User: "system", Password: "topsecret", Host: "mydb_high", ConnectString: "mydb_high"},
+	} {
+		for name, got := range map[string]string{"Display": d.Display(), "String": d.String(), "%v": fmt.Sprintf("%v", d)} {
+			if strings.Contains(got, "topsecret") {
+				t.Errorf("%s = %q, must not leak the password", name, got)
+			}
+		}
+	}
+}
+
+// Parse errors must not echo the raw input, which carries the password.
+func TestParseErrorsDoNotEchoInput(t *testing.T) {
+	for _, raw := range []string{"topsecret", "user/topsecret", "user/topsecret@", "user/topsecret@h:99999999999999999999/S"} {
+		_, err := Parse(raw)
+		if err == nil {
+			t.Errorf("Parse(%q) = nil error, want a rejection", raw)
+			continue
+		}
+		if strings.Contains(err.Error(), "topsecret") {
+			t.Errorf("Parse error %q leaks the input", err)
+		}
 	}
 }

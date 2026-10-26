@@ -43,29 +43,33 @@ type DSN struct {
 }
 
 // Local returns the zero-config local target, honouring ORACLE_PORT/ORACLE_PWD
-// exactly like connection.py's _local_dsn().
-func Local() DSN {
+// exactly like connection.py's _local_dsn(), including its failure: a set but
+// non-integer ORACLE_PORT is an error rather than a silent fallback to 1521.
+func Local() (DSN, error) {
 	port := DefaultPort
-	if raw := os.Getenv(EnvPort); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil {
-			port = n
+	if raw, ok := os.LookupEnv(EnvPort); ok {
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			return DSN{}, fmt.Errorf("%s must be an integer, got %q", EnvPort, raw)
 		}
+		port = n
 	}
 	password := DefaultPassword
 	if pw := os.Getenv(EnvPwd); pw != "" {
 		password = pw
 	}
-	return DSN{User: DefaultUser, Password: password, Host: DefaultHost, Port: port, Service: DefaultService}
+	return DSN{User: DefaultUser, Password: password, Host: DefaultHost, Port: port, Service: DefaultService}, nil
 }
 
 var easyConnect = regexp.MustCompile(`^(?P<host>[^:/]+):(?P<port>\d+)/(?P<service>.+)$`)
 
 // Parse accepts "user/password@host:port/service". The password may contain '@',
-// so the split scans from the right, matching DSN.parse in connection.py.
+// so the split scans from the right, matching DSN.parse in connection.py. Errors
+// never quote the input: it carries the password.
 func Parse(raw string) (DSN, error) {
 	slash := strings.Index(raw, "/")
 	if slash <= 0 {
-		return DSN{}, fmt.Errorf("malformed DSN %q: expected user/password@host:port/service", raw)
+		return DSN{}, errors.New("malformed DSN: expected user/password@host:port/service")
 	}
 	user := raw[:slash]
 	rest := raw[slash+1:]
@@ -75,12 +79,11 @@ func Parse(raw string) (DSN, error) {
 		if m := easyConnect.FindStringSubmatch(rest[idx+1:]); m != nil {
 			port, err := strconv.Atoi(m[2])
 			if err != nil {
-				return DSN{}, fmt.Errorf("malformed DSN %q: bad port", raw)
+				return DSN{}, errors.New("malformed DSN: bad port")
 			}
 			return DSN{User: user, Password: rest[:idx], Host: m[1], Port: port, Service: m[3]}, nil
 		}
-		next := strings.LastIndex(rest[:idx], "@")
-		idx = next
+		idx = strings.LastIndex(rest[:idx], "@")
 	}
 
 	// No host:port/service tail: treat everything after the last '@' as an opaque
@@ -89,7 +92,7 @@ func Parse(raw string) (DSN, error) {
 		cs := rest[idx+1:]
 		return DSN{User: user, Password: rest[:idx], Host: cs, ConnectString: cs}, nil
 	}
-	return DSN{}, fmt.Errorf("malformed DSN %q: no '@' target", raw)
+	return DSN{}, errors.New("malformed DSN: no '@' target")
 }
 
 // Validate reports the first field that cannot produce a usable connection.
@@ -126,9 +129,14 @@ func (d DSN) OracleDSN() string {
 	return fmt.Sprintf("%s:%d/%s", d.Host, d.Port, d.Service)
 }
 
-// String is the password-free form the user/password@host:port/service shape
-// the Python CLI accepts. It round-trips through Parse.
-func (d DSN) String() string {
+// String is the password-free form, so a DSN passed to a formatter or logger
+// cannot leak credentials. Use ConnectionString for the full credentialed form.
+func (d DSN) String() string { return d.Display() }
+
+// ConnectionString is the full user/password@host:port/service form the Python
+// CLI accepts in ORACLE_DSN. It contains the password and round-trips through
+// Parse; never log it.
+func (d DSN) ConnectionString() string {
 	if d.ConnectString != "" {
 		return fmt.Sprintf("%s/%s@%s", d.User, d.Password, d.ConnectString)
 	}

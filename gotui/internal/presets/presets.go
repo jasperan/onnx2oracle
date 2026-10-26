@@ -1,119 +1,99 @@
 // Package presets reads the curated model registry that the onnx2oracle CLI
-// exposes through `onnx2oracle presets`.
+// exposes through `onnx2oracle presets --json`.
 //
-// The names are never invented here: they come from the CLI's own table, which
+// The names are never invented here: they come from the CLI's own registry, which
 // is the same source of truth a user would read. Parse is pure and unit-tested
-// against a fixed sample so the parsing contract does not depend on a live run.
+// against fixed JSON so the decoding contract does not depend on a live run.
 package presets
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 )
 
-// Preset is one row of `onnx2oracle presets`.
+// Preset is one entry of `onnx2oracle presets --json`.
 type Preset struct {
 	Name       string
 	Task       string // "embedding" or "reranker"
-	Dims       int    // 0 when the CLI prints the not-applicable placeholder
+	Dims       int    // 0 when the CLI reports no value (rerankers)
 	Pooling    string // "" when not applicable
-	SizeMB     int
+	SizeMB     int    // 0 when the CLI does not report an approximate size
 	OracleName string
 }
 
 // Label is the single-line form used in a huh Select option.
 func (p Preset) Label() string {
-	if p.Task == "embedding" {
-		return fmt.Sprintf("%s — %s, %d dims, %s, ~%d MB", p.Name, p.Task, p.Dims, p.Pooling, p.SizeMB)
+	size := ""
+	if p.SizeMB > 0 {
+		size = fmt.Sprintf(", ~%d MB", p.SizeMB)
 	}
-	return fmt.Sprintf("%s — %s, ~%d MB", p.Name, p.Task, p.SizeMB)
+	if p.Task == "embedding" {
+		return fmt.Sprintf("%s — %s, %d dims, %s%s", p.Name, p.Task, p.Dims, p.Pooling, size)
+	}
+	return fmt.Sprintf("%s — %s%s", p.Name, p.Task, size)
 }
 
-// notApplicable is the placeholder the CLI prints for fields a reranker has no
-// value for. Both spellings appear because rich renders an em dash.
-const notApplicable = "—"
+// wire mirrors one JSON object. Dims and Pooling are pointers because a
+// reranker has neither and the CLI may emit null or omit the key.
+type wire struct {
+	Name       string  `json:"name"`
+	Task       string  `json:"task"`
+	Dims       *int    `json:"dims"`
+	Pooling    *string `json:"pooling"`
+	SizeMB     int     `json:"approx_size_mb"`
+	OracleName string  `json:"oracle_name"`
+}
 
-// Parse reads the CLI's table. It is deliberately tolerant of the box drawing
-// characters changing: a row is any line with at least six '│' separated cells.
+// Parse decodes the JSON array printed by `onnx2oracle presets --json`.
 func Parse(out string) ([]Preset, error) {
-	var got []Preset
-	for _, raw := range strings.Split(out, "\n") {
-		if strings.Count(raw, "│") < 6 {
-			continue
+	var items []wire
+	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		return nil, fmt.Errorf("decoding presets JSON: %w", err)
+	}
+	got := make([]Preset, 0, len(items))
+	for i, it := range items {
+		if it.Name == "" || it.Task == "" {
+			return nil, fmt.Errorf("preset %d has no name or task", i)
 		}
-		cells := splitCells(raw)
-		if len(cells) < 6 {
-			continue
+		p := Preset{Name: it.Name, Task: it.Task, SizeMB: it.SizeMB, OracleName: it.OracleName}
+		if it.Dims != nil {
+			p.Dims = *it.Dims
 		}
-		name := cells[0]
-		if name == "" || strings.EqualFold(name, "Name") {
-			continue
-		}
-		p := Preset{
-			Name:       name,
-			Task:       cells[1],
-			Pooling:    naToEmpty(cells[3]),
-			OracleName: cells[5],
-		}
-		p.Dims = naToInt(cells[2])
-		p.SizeMB = naToInt(cells[4])
-		if p.Task == "" {
-			continue
+		if it.Pooling != nil {
+			p.Pooling = *it.Pooling
 		}
 		got = append(got, p)
 	}
 	if len(got) == 0 {
-		return nil, errors.New("no presets parsed: the table layout changed")
+		return nil, errors.New("the CLI reported no presets")
 	}
 	return got, nil
 }
 
-func splitCells(line string) []string {
-	parts := strings.Split(line, "│")
-	// The table is bordered, so the first and last cells are empty padding.
-	if len(parts) > 1 {
-		parts = parts[1 : len(parts)-1]
-	}
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		out = append(out, strings.TrimSpace(p))
-	}
-	return out
-}
-
-func naToEmpty(s string) string {
-	if s == notApplicable || s == "--" || s == "-" {
-		return ""
-	}
-	return s
-}
-
-func naToInt(s string) int {
-	n, err := strconv.Atoi(naToEmpty(s))
-	if err != nil {
-		return 0
-	}
-	return n
-}
-
-// Load runs `onnx2oracle presets` and parses the result.
-//
-// COLUMNS is widened because rich truncates cells to the terminal width, which
-// would silently turn "all-MiniLM-L12-v2" into "all-MiniLM-L12…" and make the
-// preset name unusable as an argument.
+// Load runs `onnx2oracle presets --json` and decodes the result.
 func Load(binary string, timeout time.Duration) ([]Preset, error) {
-	cmd := exec.Command(binary, "presets")
-	cmd.Env = append(cmd.Environ(), "COLUMNS=200")
-	var out strings.Builder
+	cmd := exec.Command(binary, "presets", "--json")
+	var out, stderr strings.Builder
 	cmd.Stdout = &out
+	cmd.Stderr = &stderr
 	if err := runWithTimeout(cmd, timeout); err != nil {
-		return nil, fmt.Errorf("running %s presets: %w", binary, err)
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			err = fmt.Errorf("%w: %s", err, lastLine(msg))
+		}
+		return nil, fmt.Errorf("running %s presets --json: %w", binary, err)
 	}
 	return Parse(out.String())
+}
+
+func lastLine(s string) string {
+	if i := strings.LastIndex(s, "\n"); i >= 0 {
+		return strings.TrimSpace(s[i+1:])
+	}
+	return s
 }
 
 func runWithTimeout(cmd *exec.Cmd, timeout time.Duration) error {
