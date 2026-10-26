@@ -1,12 +1,16 @@
 """End-to-end health check for a loaded ONNX model.
 
 For ``function:"embedding"`` models, runs ``VECTOR_EMBEDDING`` against a live
-Oracle connection, asserts shape and L2 normalization, and performs a cosine
-sanity check (king/queen should be more similar than king/banana).
+Oracle connection, asserts the output dimension and L2 normalization, and
+performs a cosine sanity check (king/queen should be more similar than
+king/banana).
 
 For ``function:"regression"`` (reranker) models, runs ``PREDICTION`` with two
 text inputs and asserts that a relevant query/document pair scores strictly
 higher than an irrelevant one.
+
+``smoke_test`` does not raise for database problems: every failure comes back
+as ``VerifyResult.error``.
 """
 
 from __future__ import annotations
@@ -15,7 +19,9 @@ import json
 import logging
 import math
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import oracledb
 
@@ -24,6 +30,9 @@ from onnx2oracle.connection import DSN
 from onnx2oracle.loader import registered_task
 
 logger = logging.getLogger(__name__)
+
+NORM_TOLERANCE = 1e-3
+"""How far an L2-normalized embedding's norm may drift from 1.0 and still pass."""
 
 
 @dataclass
@@ -37,33 +46,71 @@ class VerifyResult:
     error: str | None = None
     task: str | None = None
     sample_scores: tuple[float, float] | None = None
+    # What the caller expects of an embedding model. ``expected_dims=None`` means "any positive dimension";
+    # ``expect_normalized=False`` waives the L2-norm check for models loaded with --no-normalize.
+    expected_dims: int | None = None
+    expect_normalized: bool = True
+    # (cos(king, queen), cos(king, banana)) for embedding models.
+    similarities: tuple[float, float] | None = None
+
+    @property
+    def dims_ok(self) -> bool:
+        """Dimension is positive and, when an expectation is known, equal to it."""
+        dims = self.sample_embedding_dims
+        if dims is None or dims <= 0:
+            return False
+        return self.expected_dims is None or dims == self.expected_dims
+
+    @property
+    def norm_ok(self) -> bool:
+        """Sample norm is finite and, for normalized models, within ``NORM_TOLERANCE`` of 1.0."""
+        norm = self.sample_embedding_norm
+        if norm is None or not math.isfinite(norm):
+            return False
+        return not self.expect_normalized or abs(norm - 1.0) <= NORM_TOLERANCE
+
+    @property
+    def scores_ok(self) -> bool:
+        """Reranker sample scores exist and are finite."""
+        return self.sample_scores is not None and all(math.isfinite(s) for s in self.sample_scores)
 
     @property
     def ok(self) -> bool:
         """True only when every task-appropriate check passed."""
-        if self.error or not self.connected or not self.model_registered:
+        if self.error is not None or not self.connected or not self.model_registered:
             return False
-        if self.task == "embedding" and self.sample_embedding_dims is None:
-            return False
-        if self.task == "reranker" and self.sample_scores is None:
-            return False
-        return self.similarity_sane
+        if self.task == "embedding":
+            return self.dims_ok and self.norm_ok and self.similarity_sane
+        if self.task == "reranker":
+            return self.scores_ok and self.similarity_sane
+        return False
 
 
-def _embed(conn: oracledb.Connection, model_name: str, text: str) -> list[float]:
-    safe = validate_oracle_name(model_name)
-    cur = conn.cursor()
-    cur.execute(
-        f"SELECT VECTOR_EMBEDDING({safe} USING :t AS DATA) FROM dual",
-        {"t": text},
-    )
-    row = cur.fetchone()
-    if row is None or row[0] is None:
+def _to_floats(vec: Any) -> list[float]:
+    """Turn what python-oracledb returns for a VECTOR value (array, list, or JSON text) into floats."""
+    if vec is None:
         return []
-    vec = row[0]
     if isinstance(vec, str):
-        return json.loads(vec)
-    return list(vec)
+        return [float(x) for x in json.loads(vec)]
+    return [float(x) for x in vec]
+
+
+def embed_texts(conn: oracledb.Connection, model_name: str, texts: Sequence[str]) -> list[list[float]]:
+    """Embed *texts* with the registered model *model_name* in a single query.
+
+    Returns one vector per input, in input order. An input Oracle yields NULL for
+    (an empty string, for instance) comes back as ``[]``.
+    """
+    safe = validate_oracle_name(model_name)
+    if not texts:
+        return []
+    # One row per text; the explicit idx keeps the result order independent of the optimizer.
+    rows = " UNION ALL ".join(f"SELECT {i} AS idx, :t{i} AS t FROM dual" for i in range(len(texts)))
+    sql = f"SELECT idx, VECTOR_EMBEDDING({safe} USING t AS DATA) FROM ({rows}) ORDER BY idx"
+    cur = conn.cursor()
+    cur.execute(sql, {f"t{i}": text for i, text in enumerate(texts)})
+    by_idx = {int(idx): _to_floats(vec) for idx, vec in cur.fetchall()}
+    return [by_idx.get(i, []) for i in range(len(texts))]
 
 
 def _rerank_score(conn: oracledb.Connection, model_name: str, query: str, doc: str) -> float | None:
@@ -80,14 +127,42 @@ def _rerank_score(conn: oracledb.Connection, model_name: str, query: str, doc: s
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
+    if len(a) != len(b):
+        raise ValueError(f"Cannot compare embeddings of different lengths ({len(a)} vs {len(b)}).")
     dot = sum(x * y for x, y in zip(a, b, strict=True))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(y * y for y in b))
     return dot / (na * nb) if na and nb else 0.0
 
 
-def smoke_test(dsn: DSN, oracle_name: str) -> VerifyResult:
-    """Connect, confirm registration, and run a task-appropriate sanity check."""
+def _describe(exc: BaseException) -> str:
+    """One-line-ish, never-empty description of *exc* (``VerifyResult.error`` must be truthy)."""
+    text = str(exc).strip()
+    if isinstance(exc, oracledb.Error):
+        return text or type(exc).__name__
+    return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
+
+
+def _close_quietly(conn: oracledb.Connection) -> None:
+    try:
+        conn.close()
+    except Exception:
+        logger.debug("Closing the Oracle connection failed", exc_info=True)
+
+
+def smoke_test(
+    dsn: DSN,
+    oracle_name: str,
+    *,
+    expected_dims: int | None = None,
+    expect_normalized: bool = True,
+) -> VerifyResult:
+    """Connect, confirm registration, and run a task-appropriate sanity check.
+
+    ``expected_dims`` pins the embedding dimension and ``expect_normalized`` says whether the
+    embedding should have an L2 norm of ~1 (see ``VerifyResult.ok``). Database problems are
+    reported through ``VerifyResult.error`` rather than raised.
+    """
     t0 = time.perf_counter()
 
     def _elapsed_ms() -> int:
@@ -101,8 +176,10 @@ def smoke_test(dsn: DSN, oracle_name: str) -> VerifyResult:
     try:
         conn = dsn.connect()
     except Exception as e:
-        return VerifyResult(False, False, None, None, False, _elapsed_ms(), str(e))
+        return VerifyResult(False, False, None, None, False, _elapsed_ms(), _describe(e))
 
+    registered = False
+    task: str | None = None
     try:
         task = registered_task(conn, oracle_name)
         if task is None:
@@ -111,6 +188,7 @@ def smoke_test(dsn: DSN, oracle_name: str) -> VerifyResult:
                 _elapsed_ms(),
                 f"Model {oracle_name} not registered",
             )
+        registered = True
 
         if task == "reranker":
             query = "How many people live in Berlin?"
@@ -125,39 +203,64 @@ def smoke_test(dsn: DSN, oracle_name: str) -> VerifyResult:
                     "PREDICTION returned null",
                     task=task,
                 )
-            sane = r_score > i_score
             return VerifyResult(
                 connected=True,
                 model_registered=True,
                 sample_embedding_dims=None,
                 sample_embedding_norm=None,
-                similarity_sane=sane,
+                similarity_sane=r_score > i_score,
                 elapsed_ms=_elapsed_ms(),
                 task=task,
                 sample_scores=(r_score, i_score),
             )
 
-        vec = _embed(conn, oracle_name, "hello world")
-        if not vec:
+        texts = ["hello world", "king", "queen", "banana"]
+        vectors = embed_texts(conn, oracle_name, texts)
+        missing = [text for text, vec in zip(texts, vectors, strict=True) if not vec]
+        if missing:
             return VerifyResult(
                 True, True, None, None, False,
                 _elapsed_ms(),
-                "VECTOR_EMBEDDING returned null",
+                f"VECTOR_EMBEDDING returned null for {missing!r}",
                 task=task,
+                expected_dims=expected_dims,
+                expect_normalized=expect_normalized,
             )
 
-        dims = len(vec)
-        norm = math.sqrt(sum(x * x for x in vec))
+        sample, king, queen, banana = vectors
+        dims = len(sample)
+        norm = math.sqrt(sum(x * x for x in sample))
+        lengths = [len(vec) for vec in vectors]
+        if len(set(lengths)) != 1:
+            return VerifyResult(
+                True, True, dims, norm, False,
+                _elapsed_ms(),
+                f"VECTOR_EMBEDDING returned vectors of different lengths {lengths} for {texts!r}",
+                task=task,
+                expected_dims=expected_dims,
+                expect_normalized=expect_normalized,
+            )
 
-        v_king = _embed(conn, oracle_name, "king")
-        v_queen = _embed(conn, oracle_name, "queen")
-        v_banana = _embed(conn, oracle_name, "banana")
-        sane = _cosine(v_king, v_queen) > _cosine(v_king, v_banana)
-
+        cos_king_queen = _cosine(king, queen)
+        cos_king_banana = _cosine(king, banana)
         return VerifyResult(
-            True, True, dims, norm, sane,
+            True, True, dims, norm,
+            cos_king_queen > cos_king_banana,
             _elapsed_ms(),
             task=task,
+            expected_dims=expected_dims,
+            expect_normalized=expect_normalized,
+            similarities=(cos_king_queen, cos_king_banana),
+        )
+    except Exception as e:
+        logger.debug("Smoke test of %s failed", oracle_name, exc_info=True)
+        return VerifyResult(
+            True, registered, None, None, False,
+            _elapsed_ms(),
+            _describe(e),
+            task=task,
+            expected_dims=expected_dims,
+            expect_normalized=expect_normalized,
         )
     finally:
-        conn.close()
+        _close_quietly(conn)

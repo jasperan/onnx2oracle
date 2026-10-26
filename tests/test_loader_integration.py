@@ -15,7 +15,7 @@ import os
 import pytest
 
 from onnx2oracle.connection import DSN
-from onnx2oracle.loader import drop_model, model_exists, registered_task, upload_model
+from onnx2oracle.loader import UploadStatus, drop_model, model_exists, registered_task, upload_model
 from onnx2oracle.pipeline import build_augmented, build_reranker
 from onnx2oracle.presets import EmbeddingSpec, RerankerSpec, get_preset
 from onnx2oracle.verify import smoke_test
@@ -48,7 +48,7 @@ def test_end_to_end_miniLM_L6():
 
     data = build_augmented(spec)
     # force=True so a prior run's artifact doesn't block us
-    upload_model(dsn, data, spec.oracle_name, force=True)
+    assert upload_model(dsn, data, spec.oracle_name, force=True) is UploadStatus.REGISTERED
 
     try:
         result = smoke_test(dsn, spec.oracle_name)
@@ -83,7 +83,7 @@ def test_end_to_end_reranker_ms_marco_minilm_l6():
     dsn = _get_dsn()
 
     data = build_reranker(spec)
-    upload_model(dsn, data, spec.oracle_name, force=True, task="reranker")
+    assert upload_model(dsn, data, spec.oracle_name, force=True, task="reranker") is UploadStatus.REGISTERED
 
     try:
         conn = oracledb.connect(user=dsn.user, password=dsn.password, dsn=dsn.to_oracle_dsn())
