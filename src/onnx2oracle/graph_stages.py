@@ -50,14 +50,56 @@ def clear_outputs(graph: onnx.GraphProto) -> None:
         graph.output.pop()
 
 
-def add_embedding_pooling(graph: onnx.GraphProto, pooling: str) -> str:
+def hidden_state_output(model: onnx.ModelProto) -> onnx.ValueInfoProto:
+    """Return the token-level hidden-state output of a transformer body.
+
+    Prefers an output named ``last_hidden_state`` (HuggingFace exports); otherwise the
+    first float32 output of rank 3 (``[batch, sequence, hidden]``, e.g. sentence-transformers'
+    ``token_embeddings``). Already-pooled 2-D outputs such as ``sentence_embedding`` are never picked.
+    """
+    outputs = list(model.graph.output)
+    for output in outputs:
+        if output.name == "last_hidden_state":
+            return output
+    for output in outputs:
+        tensor_type = output.type.tensor_type
+        if tensor_type.elem_type == TensorProto.FLOAT and len(tensor_type.shape.dim) == 3:
+            return output
+    described = ", ".join(_describe_value_info(output) for output in outputs) or "none"
+    raise ValueError(
+        "Could not find the token-level hidden-state output of the transformer: expected an output "
+        "named 'last_hidden_state' or a float32 output of shape [batch, sequence, hidden]. "
+        f"The model outputs: {described}."
+    )
+
+
+def hidden_size(output: onnx.ValueInfoProto) -> int | None:
+    """Return the static size of the last dimension of *output*, or ``None`` when it is dynamic/unknown."""
+    dims = output.type.tensor_type.shape.dim
+    if len(dims) == 0 or not dims[-1].HasField("dim_value"):
+        return None
+    return dims[-1].dim_value
+
+
+def _describe_value_info(value_info: onnx.ValueInfoProto) -> str:
+    tensor_type = value_info.type.tensor_type
+    dtype = TensorProto.DataType.Name(tensor_type.elem_type).lower()
+    dims = [
+        dim.dim_param or (str(dim.dim_value) if dim.HasField("dim_value") else "?")
+        for dim in tensor_type.shape.dim
+    ]
+    return f"{value_info.name}: {dtype}[{', '.join(dims)}]"
+
+
+def add_embedding_pooling(graph: onnx.GraphProto, pooling: str, hidden_state: str) -> str:
+    """Pool the ``[1, sequence, hidden]`` tensor *hidden_state* into ``[1, hidden]``; returns the new tensor's name."""
     if pooling == "mean":
         pool_axes = numpy_helper.from_array(np.array([1], dtype=np.int64), name="pool_axes_1")
         graph.initializer.append(pool_axes)
         graph.node.append(
             helper.make_node(
                 "ReduceMean",
-                ["core_last_hidden_state", "pool_axes_1"],
+                [hidden_state, "pool_axes_1"],
                 ["pooled"],
                 keepdims=0,
             )
@@ -70,7 +112,7 @@ def add_embedding_pooling(graph: onnx.GraphProto, pooling: str) -> str:
         graph.node.append(
             helper.make_node(
                 "Gather",
-                ["core_last_hidden_state", "cls_indices"],
+                [hidden_state, "cls_indices"],
                 ["pooled_2d"],
                 axis=1,
             )
