@@ -30,10 +30,11 @@ html .hero h1 {
   letter-spacing: -4px;
   line-height: 0.99;
   margin: 24px 0;
-  font-weight: 570;
+  font-weight: 500;
 }
 html .hero h1 em {
   font-family: Georgia, serif;
+  font-style: normal;
   font-weight: 400;
   color: var(--accent);
 }
@@ -51,7 +52,7 @@ html .btn {
   font-size: 12px;
 }
 html .hero-meta {
-  font-size: 10px;
+  font-size: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -65,12 +66,12 @@ html .hero .terminal {
   box-shadow: none;
 }
 html .hero .terminal-body {
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.9;
   padding: 19px;
 }
 html .terminal-title {
-  font-size: 9px;
+  font-size: 11.5px;
 }
 .docs-skip {
   position: fixed;
@@ -96,10 +97,10 @@ html .terminal-title {
   display: flex;
   justify-content: space-between;
   font:
-    9px ui-monospace,
+    11.5px ui-monospace,
     monospace;
   color: var(--ink-muted);
-  letter-spacing: 1px;
+  letter-spacing: 0.04em;
 }
 .artifact-topline > span + span {
   color: var(--accent);
@@ -107,8 +108,8 @@ html .terminal-title {
 .artifact-title {
   display: flex;
   align-items: center;
-  gap: 22px;
-  margin: 29px 0;
+  gap: 24px;
+  margin: 28px 0;
 }
 .artifact-symbol {
   flex-shrink: 0;
@@ -128,13 +129,13 @@ html .terminal-title {
   font-size: 30px;
   letter-spacing: -1px;
   line-height: 1.1;
-  font-weight: 550;
+  font-weight: 500;
 }
 .artifact-title div > span {
   display: block;
   margin-top: 12px;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: 11.5px;
 }
 .artifact-pipeline {
   list-style: none;
@@ -146,7 +147,7 @@ html .terminal-title {
 .artifact-pipeline li {
   flex: 1;
   padding: 14px 9px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink);
 }
 .artifact-pipeline li + li {
@@ -156,26 +157,27 @@ html .terminal-title {
   display: block;
   color: var(--accent);
   font:
-    9px ui-monospace,
+    11.5px ui-monospace,
     monospace;
   margin-bottom: 8px;
 }
 .artifact-pipeline small {
   display: block;
-  font-size: 8px;
-  margin-top: 2px;
+  font-size: 11.5px;
+  margin-top: 4px;
+  color: var(--ink-muted);
 }
 .artifact-output {
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  margin-top: 18px;
+  gap: 8px;
+  margin-top: 16px;
 }
 .artifact-output > span {
   font:
-    8px ui-monospace,
+    11.5px ui-monospace,
     monospace;
-  letter-spacing: 1px;
+  letter-spacing: 0.04em;
   color: var(--ink-muted);
 }
 .artifact-output > code {

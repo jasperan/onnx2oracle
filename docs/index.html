@@ -67,14 +67,14 @@
 
   <aside aria-label="Three-command demo">
     <div class="model-artifact" aria-label="One ONNX graph contains tokenization, transformer inference, pooling, and normalization">
-      <div class="artifact-topline"><span>MODEL / PACKAGED FOR ORACLE</span><span>.onnx</span></div>
+      <div class="artifact-topline"><span>Model, packaged for Oracle</span><span>.onnx</span></div>
       <div class="artifact-title"><span class="artifact-symbol" aria-hidden="true">[o]</span><div><strong>One graph.<br>The full pipeline.</strong><span>From raw text to an SQL-callable model</span></div></div>
       <ol class="artifact-pipeline"><li><span>01</span>Tokenize</li><li><span>02</span>Transform</li><li><span>03</span>Pool + normalize<small>Embedding models</small></li></ol>
-      <div class="artifact-output"><span>RUN WHERE YOUR DATA LIVES</span><code>SELECT VECTOR_EMBEDDING(…)</code></div>
+      <div class="artifact-output"><span>Run where your data lives</span><code>SELECT VECTOR_EMBEDDING(…)</code></div>
     </div>
     <div class="terminal" role="img" aria-label="Terminal showing docker up, load, verify commands">
       <span class="terminal-dots"><span></span><span></span><span></span></span>
-      <span class="terminal-title">Three commands · illustrative output</span>
+      <span class="terminal-title">Three commands</span>
       <div class="terminal-body">
         <span class="term-line t1"><span class="term-prompt">$ </span><span class="term-cmd">onnx2oracle docker up --wait</span></span>
         <span class="term-line t2"><span class="term-out">&nbsp;&nbsp;Oracle AI Database Free ready on localhost:1521 &nbsp;</span><span class="term-ok">ok</span></span>
@@ -84,6 +84,7 @@
         <span class="term-line t6"><span class="term-out">&nbsp;&nbsp;VECTOR_EMBEDDING returned 384-d · cosine(self,self)=1.000 &nbsp;</span><span class="term-ok">ok</span><span class="term-caret"></span></span>
       </div>
     </div>
+    <p class="terminal-caption">Illustrative output.</p>
   </aside>
 </section>
 

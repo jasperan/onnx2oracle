@@ -22,6 +22,7 @@
   --rule-soft: #e8e3d8;
   --accent: #b85425;
   --accent-ink: #8d3e1b;
+  --ok: #6b7f55;
   --code-bg: #1b1815;
   --code-ink: #f0ebe0;
   --code-dim: #a39a8b;
@@ -224,7 +225,7 @@ code, pre, kbd, samp, .mono {
 
 .display {
   font-size: clamp(48px, 7.4vw, 112px);
-  font-weight: 520;
+  font-weight: 500;
   letter-spacing: -0.035em;
   line-height: 0.96;
   text-wrap: balance;
@@ -232,7 +233,7 @@ code, pre, kbd, samp, .mono {
 }
 .heading {
   font-size: clamp(28px, 4.2vw, 54px);
-  font-weight: 540;
+  font-weight: 500;
   letter-spacing: -0.026em;
   line-height: 1.07;
   text-wrap: balance;
@@ -253,22 +254,6 @@ code, pre, kbd, samp, .mono {
   margin-bottom: 14px;
   display: inline-block;
 }
-
-.chip {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--rule);
-  background: var(--bg-elev);
-  font: 500 11.5px/1 ui-monospace, monospace;
-  letter-spacing: 0.04em;
-  color: var(--ink-muted);
-}
-.chip-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--accent);
-}
-.chip-row { display: flex; gap: 10px; flex-wrap: wrap; }
 
 kbd {
   font: 500 11px/1 ui-monospace, monospace;
@@ -297,7 +282,7 @@ kbd {
 }
 .slide--title .display { color: var(--ink); }
 .slide--title .brand-o {
-  font: 520 13px/1 ui-monospace, monospace;
+  font: 500 13px/1 ui-monospace, monospace;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -312,19 +297,23 @@ kbd {
 }
 .slide--title .title-accent {
   color: var(--accent);
-  font-style: italic;
-  font-weight: 460;
+  font-weight: 500;
 }
 .slide--title .title-tagline {
   margin-top: 24px;
   font-size: clamp(18px, 2vw, 26px);
   color: var(--ink-muted);
-  max-width: 32ch;
+  max-width: 44ch;
   line-height: 1.35;
 }
 .slide--title .title-meta {
   margin-top: 48px;
-  display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;
+  display: flex; gap: 0; justify-content: center; flex-wrap: wrap;
+  font: 500 13.5px/1.6 ui-monospace, monospace;
+  color: var(--ink-faint);
+}
+.slide--title .title-meta span + span::before {
+  content: "·"; margin: 0 16px; color: var(--rule);
 }
 
 /* ============ SLIDE: full-bleed problem ============ */
@@ -348,7 +337,7 @@ kbd {
   background: var(--bg-elev);
 }
 .slide--problem .cost-val {
-  font: 520 clamp(22px, 2.4vw, 32px)/1 ui-monospace, monospace;
+  font: 500 clamp(22px, 2.4vw, 32px)/1 ui-monospace, monospace;
   color: var(--accent);
   letter-spacing: -0.015em;
 }
@@ -527,7 +516,7 @@ kbd {
 .slide--why .why h3 {
   margin: 0 0 6px;
   font-size: 19px;
-  font-weight: 560;
+  font-weight: 500;
   letter-spacing: -0.015em;
   color: var(--ink);
 }
@@ -641,7 +630,7 @@ kbd {
 }
 .slide--pool .branch h3 {
   margin: 0 0 12px;
-  font: 520 18px/1 ui-monospace, monospace;
+  font: 500 18px/1 ui-monospace, monospace;
   letter-spacing: -0.01em;
   color: var(--accent);
 }
@@ -692,13 +681,13 @@ kbd {
   min-width: 0;
 }
 .slide--presets .preset-name {
-  font: 520 14px/1.3 ui-monospace, monospace;
+  font: 500 14px/1.3 ui-monospace, monospace;
   letter-spacing: -0.01em;
   color: var(--ink);
   word-break: break-word;
 }
 .slide--presets .preset-dim {
-  font: 520 22px/1 ui-monospace, monospace;
+  font: 500 22px/1 ui-monospace, monospace;
   color: var(--accent);
   letter-spacing: -0.02em;
 }
@@ -711,8 +700,8 @@ kbd {
 .slide--presets .preset-verified {
   margin-top: auto; padding-top: 10px;
   font: 500 11px/1 ui-monospace, monospace;
-  color: #6b7f55;
-  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ok);
+  letter-spacing: 0.04em;
   border-top: 1px solid var(--rule-soft);
 }
 .slide--presets .presets-cap {
@@ -800,7 +789,7 @@ kbd {
 }
 .slide--dsn ol.steps strong {
   display: block;
-  font: 520 15px/1.2 ui-monospace, monospace;
+  font: 500 15px/1.2 ui-monospace, monospace;
   color: var(--ink);
   letter-spacing: -0.01em;
   margin-bottom: 4px;
@@ -842,7 +831,7 @@ kbd {
   box-shadow: 0 0 0 4px color-mix(in oklab, #7fa35a 14%, transparent);
 }
 .slide--test .tval {
-  font: 520 clamp(44px, 5vw, 72px)/1 ui-monospace, monospace;
+  font: 500 clamp(44px, 5vw, 72px)/1 ui-monospace, monospace;
   color: var(--ink);
   letter-spacing: -0.03em;
 }
@@ -856,9 +845,8 @@ kbd {
 .slide--test .tstatus {
   margin-top: 16px;
   font: 500 11px/1 ui-monospace, monospace;
-  color: #6b7f55;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  color: var(--ok);
+  letter-spacing: 0.04em;
 }
 
 /* ============ SLIDE: proof (big numbers) ============ */
@@ -877,7 +865,7 @@ kbd {
   width: min(1200px, 96%);
 }
 .slide--proof .pval {
-  font: 520 clamp(36px, 5.2vw, 76px)/1 ui-monospace, monospace;
+  font: 500 clamp(36px, 5.2vw, 76px)/1 ui-monospace, monospace;
   color: var(--accent);
   letter-spacing: -0.03em;
   white-space: nowrap;
@@ -928,11 +916,11 @@ kbd {
 .slide--start .start-card h3 {
   margin: 0 0 10px;
   font-size: 20px;
-  font-weight: 560;
+  font-weight: 500;
   color: var(--ink);
 }
 .slide--start .start-card .cmd {
-  font: 520 clamp(17px, 1.7vw, 22px)/1.4 ui-monospace, monospace;
+  font: 500 clamp(17px, 1.7vw, 22px)/1.4 ui-monospace, monospace;
   color: var(--ink);
   background: var(--bg);
   padding: 14px 18px;
@@ -1037,9 +1025,9 @@ kbd {
       Load any HuggingFace embedding model into Oracle AI Database with one command.
     </p>
     <div class="title-meta reveal">
-      <span class="chip"><span class="chip-dot"></span>on PyPI</span>
-      <span class="chip">MIT license</span>
-      <span class="chip">Oracle AI Database</span>
+      <span>on PyPI</span>
+      <span>MIT license</span>
+      <span>Oracle AI Database</span>
     </div>
   </section>
 
@@ -1463,9 +1451,9 @@ merged = compose.<span class="f">merge_models</span>(
         <span class="preset-name">all-MiniLM-L6-v2</span>
         <span class="preset-dim">384d</span>
         <div class="preset-meta">
-          <span>MEAN POOL</span>
+          <span>Mean pool</span>
           <span>~90 MB</span>
-          <span>ENGLISH</span>
+          <span>English</span>
         </div>
         <span class="preset-verified">Runnable</span>
       </div>
@@ -1473,9 +1461,9 @@ merged = compose.<span class="f">merge_models</span>(
         <span class="preset-name">all-MiniLM-L12-v2</span>
         <span class="preset-dim">384d</span>
         <div class="preset-meta">
-          <span>MEAN POOL</span>
+          <span>Mean pool</span>
           <span>~130 MB</span>
-          <span>DEEPER</span>
+          <span>Deeper</span>
         </div>
         <span class="preset-verified">Runnable</span>
       </div>
@@ -1483,9 +1471,9 @@ merged = compose.<span class="f">merge_models</span>(
         <span class="preset-name">all-mpnet-base-v2</span>
         <span class="preset-dim">768d</span>
         <div class="preset-meta">
-          <span>MEAN POOL</span>
+          <span>Mean pool</span>
           <span>~420 MB</span>
-          <span>QUALITY</span>
+          <span>Quality</span>
         </div>
         <span class="preset-verified">Runnable</span>
       </div>
@@ -1493,9 +1481,9 @@ merged = compose.<span class="f">merge_models</span>(
         <span class="preset-name">bge-small-en-v1.5</span>
         <span class="preset-dim">384d</span>
         <div class="preset-meta">
-          <span>CLS POOL</span>
+          <span>CLS pool</span>
           <span>~130 MB</span>
-          <span>BEIR-STRONG</span>
+          <span>BEIR strong</span>
         </div>
         <span class="preset-verified">Runnable</span>
       </div>
@@ -1503,9 +1491,9 @@ merged = compose.<span class="f">merge_models</span>(
         <span class="preset-name">nomic-embed-text-v1</span>
         <span class="preset-dim">768d</span>
         <div class="preset-meta">
-          <span>MEAN POOL</span>
+          <span>Mean pool</span>
           <span>~540 MB</span>
-          <span>LONG-CTX</span>
+          <span>Long context</span>
         </div>
         <span class="preset-verified">Runnable</span>
       </div>

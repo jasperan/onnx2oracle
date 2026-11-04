@@ -17,6 +17,8 @@
   --rule-soft: #e8e3d8;
   --accent: #b85425;          /* muted rust — 1 accent, <80% sat */
   --accent-ink: #8d3e1b;
+  --ok: #6b7f55;            /* status green, tuned to the warm ramp */
+  --ok-on-dark: #9fbf8a;    /* the terminal is always dark */
   --code-bg: #1b1815;
   --code-ink: #f0ebe0;
   --code-dim: #a39a8b;
@@ -58,6 +60,7 @@
   --rule-soft: #221f1b;
   --accent: #d77a4a;
   --accent-ink: #e8a37a;
+  --ok: #9fbf8a;
   --code-bg: #0d0c0a;
   --code-ink: #f0ebe0;
   --code-dim: #8a8276;
@@ -101,7 +104,7 @@ a:hover { color: var(--accent); border-bottom-color: var(--accent); }
 a.bare { border-bottom: none; }
 
 h1, h2, h3, h4 {
-  font-weight: 520;
+  font-weight: 500;
   letter-spacing: -0.022em;
   line-height: 1.08;
   margin: 0;
@@ -109,7 +112,7 @@ h1, h2, h3, h4 {
 }
 h1 { font-size: var(--fs-h1); letter-spacing: -0.03em; }
 h2 { font-size: var(--fs-h2); letter-spacing: -0.025em; }
-h3 { font-size: var(--fs-h3); font-weight: 560; }
+h3 { font-size: var(--fs-h3); font-weight: 500; }
 
 p { margin: 0 0 1em; max-width: 68ch; color: var(--ink-muted); }
 p.lede {
@@ -157,7 +160,7 @@ hr {
   gap: 10px;
   border-bottom: none;
   color: var(--ink);
-  font-weight: 560;
+  font-weight: 500;
   letter-spacing: -0.02em;
 }
 .brand-mark {
@@ -223,7 +226,7 @@ section.tight { padding: 48px 0; }
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 .eyebrow::before {
   content: "";
@@ -245,12 +248,12 @@ section.tight { padding: 48px 0; }
 .hero-meta {
   margin-top: 32px;
   display: flex;
-  gap: 18px;
+  gap: 16px;
   flex-wrap: wrap;
   font-size: 13.5px;
   color: var(--ink-faint);
 }
-.hero-meta strong { color: var(--ink); font-weight: 560; }
+.hero-meta strong { color: var(--ink); font-weight: 500; }
 
 /* CTA row */
 .cta-row {
@@ -317,23 +320,30 @@ section.tight { padding: 48px 0; }
   letter-spacing: 0.04em;
 }
 .terminal-body { margin-top: 28px; min-height: 150px; }
+.terminal-caption {
+  margin: 12px 0 0;
+  font: 500 11.5px/1.4 ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  text-align: right;
+}
 .term-line {
   display: block;
   opacity: 0;
   transform: translateY(4px);
-  animation: termFade 520ms var(--ease) forwards;
+  animation: termFade 520ms var(--ease) both;
   will-change: transform, opacity;
 }
-.term-line.t1 { animation-delay: 200ms; }
-.term-line.t2 { animation-delay: 1200ms; }
-.term-line.t3 { animation-delay: 2200ms; }
-.term-line.t4 { animation-delay: 3200ms; }
-.term-line.t5 { animation-delay: 4200ms; }
-.term-line.t6 { animation-delay: 5200ms; }
+.term-line.t1 { animation-delay: 0ms; }
+.term-line.t2 { animation-delay: 80ms; }
+.term-line.t3 { animation-delay: 160ms; }
+.term-line.t4 { animation-delay: 240ms; }
+.term-line.t5 { animation-delay: 320ms; }
+.term-line.t6 { animation-delay: 400ms; }
 .term-prompt { color: var(--code-dim); }
 .term-cmd { color: var(--code-ink); }
 .term-out { color: var(--code-dim); }
-.term-ok { color: #9fbf8a; }
+.term-ok { color: var(--ok-on-dark); }
 .term-caret {
   display: inline-block;
   width: 7px; height: 14px;
@@ -341,7 +351,7 @@ section.tight { padding: 48px 0; }
   vertical-align: middle;
   margin-left: 2px;
   animation: termBlink 1s steps(2, end) infinite;
-  animation-delay: 5800ms;
+  animation-delay: 480ms;
   opacity: 0;
 }
 @keyframes termFade {
@@ -406,7 +416,7 @@ section.tight { padding: 48px 0; }
   margin-bottom: 10px;
 }
 .preset-name {
-  font: 520 15px/1.2 ui-monospace, monospace;
+  font: 500 15px/1.2 ui-monospace, monospace;
   letter-spacing: -0.01em;
   color: var(--ink);
 }
@@ -421,8 +431,7 @@ section.tight { padding: 48px 0; }
   gap: 14px;
   font: 500 11.5px/1 ui-monospace, monospace;
   color: var(--ink-faint);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 /* Make preset grid asymmetric at mid breakpoint */
@@ -552,7 +561,7 @@ pre .s { color: #b9c99b; }          /* string */
   font-size: 14.5px;
   color: var(--ink);
 }
-.callout strong { font-weight: 560; }
+.callout strong { font-weight: 500; }
 
 /* Tables */
 table {
@@ -566,8 +575,7 @@ thead th {
   padding: 10px 12px;
   border-bottom: 1px solid var(--rule);
   font: 500 11.5px/1.2 ui-monospace, monospace;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   color: var(--ink-faint);
   cursor: pointer;
   user-select: none;
@@ -577,7 +585,7 @@ thead th .sort-mark {
   color: var(--ink-faint);
   margin-left: 4px;
   font-size: 10px;
-  opacity: 0.4;
+  opacity: 0.6;
   transition: opacity var(--dur-fast) var(--ease);
 }
 thead th[aria-sort] .sort-mark { opacity: 1; color: var(--accent); }
