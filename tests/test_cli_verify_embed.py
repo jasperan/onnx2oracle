@@ -2,7 +2,7 @@
 
 import json
 import re
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 
 import oracledb
 import pytest
@@ -15,7 +15,11 @@ from ._fake_oracle import DSN_ARGS, FakeOracle, isolate_cli, make_embedder
 runner = CliRunner()
 
 # Click < 8.2 folds stderr into result.stdout, so a stdout-only assertion needs a newer Click.
-CLICK_SPLITS_STDERR = tuple(int(part) for part in version("click").split(".")[:2]) >= (8, 2)
+# Recent Typer releases ship without the click package and always split the streams.
+try:
+    CLICK_SPLITS_STDERR = tuple(int(part) for part in version("click").split(".")[:2]) >= (8, 2)
+except PackageNotFoundError:
+    CLICK_SPLITS_STDERR = True
 
 
 @pytest.fixture(autouse=True)
