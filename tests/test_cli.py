@@ -133,6 +133,29 @@ def test_preflight_command_prints_checks(monkeypatch):
     assert "SYS.DBMS_VECTOR:VALID" in result.stdout
 
 
+def test_preflight_strips_terminal_control_sequences_from_database_text(monkeypatch):
+    evil = "Oracle 23ai \x1b]52;c;QQ==\x1b\\\x1b[2J\x9b1m end"
+
+    def fake_preflight(_dsn):
+        return PreflightResult(checks=[PreflightCheck("database version", True, evil)], elapsed_ms=1)
+
+    monkeypatch.setattr(cli, "run_preflight", fake_preflight)
+
+    result = runner.invoke(cli.app, ["preflight", "--dsn", "system/pw@localhost:1521/FREEPDB1"])
+
+    assert "Oracle 23ai" in result.stdout
+    assert not any(c in result.stdout for c in "\x9b")
+    assert "\x1b]" not in result.stdout
+
+
+def test_print_error_strips_terminal_control_sequences(capsys):
+    cli._print_error("ORA-1 \x1b[2J\x1b[Hgone")
+    out = capsys.readouterr().out
+    assert "gone" in out
+    assert "\x1b[2J" not in out
+    assert "\x1b[H" not in out
+
+
 def test_preflight_command_fails_when_a_check_fails(monkeypatch):
     def fake_preflight(_dsn):
         return PreflightResult(

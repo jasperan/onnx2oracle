@@ -65,6 +65,14 @@ DEFAULT_MODEL_NAME = "ALL_MINILM_L6_V2"
 LOCAL_TARGET = "local"
 
 
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def _inert(text: str) -> str:
+    """Drop C0/C1 control bytes (ESC, CSI, OSC...) so server text cannot drive the terminal."""
+    return _CONTROL_CHARS.sub("", text)
+
+
 def _mark(ok: bool) -> Text:
     return Text("✓", style="green") if ok else Text("✗", style="red")
 
@@ -72,7 +80,7 @@ def _mark(ok: bool) -> Text:
 def _print_error(message: str, *, to_stderr: bool = False) -> None:
     """Print ``Error: <message>``. *message* is external text and is never parsed as Rich markup."""
     out = Console(stderr=True) if to_stderr else console
-    out.print(Text.assemble(("Error: ", "red"), message), soft_wrap=True)
+    out.print(Text.assemble(("Error: ", "red"), _inert(message)), soft_wrap=True)
 
 
 def _fail(message: str, code: int = 1, *, to_stderr: bool = False) -> NoReturn:
@@ -362,7 +370,7 @@ def preflight(
     result = run_preflight(dsn_resolved)
 
     for check in result.checks:
-        console.print(Text.assemble(_mark(check.ok), f" {check.name}: {check.detail}"))
+        console.print(Text.assemble(_mark(check.ok), f" {check.name}: {_inert(check.detail)}"))
     console.print(f"[dim]Elapsed: {result.elapsed_ms} ms[/dim]")
     if not result.ok:
         raise typer.Exit(1)
